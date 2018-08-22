@@ -975,12 +975,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * Call this to initialize the view.
      */
     private void initialize() {
-        TermSession session = mTermSession;
 
         updateText();
 
-        mEmulator = session.getEmulator();
-        session.setUpdateCallback(mUpdateNotify);
+        mEmulator = mTermSession.getEmulator();
+        mTermSession.setUpdateCallback(mUpdateNotify);
 
         requestFocus();
     }
