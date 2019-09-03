@@ -1434,8 +1434,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         ColorScheme scheme = mColorScheme;
         mTextRenderer = new PaintRenderer(mTextSize, scheme);
 
-        mForegroundPaint.setColor(scheme.getForeColor());
-        mBackgroundPaint.setColor(scheme.getBackColor());
+        if (mForegroundPaint != null) mForegroundPaint.setColor(scheme.getForeColor());
+        if (mBackgroundPaint != null) mBackgroundPaint.setColor(scheme.getBackColor());
         mCharacterWidth = mTextRenderer.getCharacterWidth();
         mCharacterHeight = mTextRenderer.getCharacterHeight();
 
