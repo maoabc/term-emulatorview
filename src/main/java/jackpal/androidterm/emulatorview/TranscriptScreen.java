@@ -16,8 +16,9 @@
 
 package jackpal.androidterm.emulatorview;
 
-import java.util.Arrays;
 import android.graphics.Canvas;
+
+import java.util.Arrays;
 
 /**
  * A TranscriptScreen is a screen that remembers data that's been scrolled. The
@@ -92,8 +93,6 @@ class TranscriptScreen implements Screen {
      * @param x X coordinate (also known as column)
      * @param y Y coordinate (also known as row)
      * @param codePoint Unicode codepoint to store
-     * @param foreColor the foreground color
-     * @param backColor the background color
      */
     public void set(int x, int y, int codePoint, int style) {
         mData.setChar(x, y, codePoint, style);

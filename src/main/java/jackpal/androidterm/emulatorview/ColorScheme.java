@@ -16,6 +16,8 @@
 
 package jackpal.androidterm.emulatorview;
 
+import android.graphics.Color;
+
 /**
  * A class describing a color scheme for an {@link EmulatorView}.
  * <p>
@@ -78,8 +80,8 @@ public class ColorScheme {
     /**
      * Creates a <code>ColorScheme</code> object.
      *
-     * @param foreColor The foreground color as an ARGB hex value.
-     * @param backColor The background color as an ARGB hex value.
+     * @param foreColor       The foreground color as an ARGB hex value.
+     * @param backColor       The background color as an ARGB hex value.
      * @param cursorForeColor The cursor foreground color as an ARGB hex value.
      * @param cursorBackColor The cursor foreground color as an ARGB hex value.
      */
@@ -103,7 +105,7 @@ public class ColorScheme {
         }
         this.foreColor = scheme[0];
         this.backColor = scheme[1];
-        if (schemeLength == 2)  {
+        if (schemeLength == 2) {
             setDefaultCursorColors();
         } else {
             this.cursorForeColor = scheme[2];
@@ -113,7 +115,7 @@ public class ColorScheme {
 
     /**
      * @return This <code>ColorScheme</code>'s foreground color as an ARGB
-     *         hex value.
+     * hex value.
      */
     public int getForeColor() {
         return foreColor;
@@ -121,15 +123,16 @@ public class ColorScheme {
 
     /**
      * @return This <code>ColorScheme</code>'s background color as an ARGB
-     *         hex value.
+     * hex value.
      */
     public int getBackColor() {
-        return backColor;
+        return Color.argb(0x50, Color.red(backColor), Color.green(backColor), Color.blue(backColor));
+//        return backColor;
     }
 
     /**
      * @return This <code>ColorScheme</code>'s cursor foreground color as an ARGB
-     *         hex value.
+     * hex value.
      */
     public int getCursorForeColor() {
         return cursorForeColor;
@@ -137,7 +140,7 @@ public class ColorScheme {
 
     /**
      * @return This <code>ColorScheme</code>'s cursor background color as an ARGB
-     *         hex value.
+     * hex value.
      */
     public int getCursorBackColor() {
         return cursorBackColor;

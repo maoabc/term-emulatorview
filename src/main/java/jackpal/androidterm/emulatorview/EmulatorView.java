@@ -948,6 +948,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollRange() {
+        if (mEmulator == null) return 0;
         return mEmulator.getScreen().getActiveRows();
     }
 
@@ -968,6 +969,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollOffset() {
+        if (mEmulator == null) return 0;
         return mEmulator.getScreen().getActiveRows() + mTopRow - mRows;
     }
 
@@ -1514,15 +1516,16 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return;
         }
 
-        int w = getWidth();
-        int h = getHeight();
+//        int w = getWidth() - getPaddingRight() - getPaddingLeft();
+//        int h = getHeight() - getPaddingTop() - getPaddingBottom();
 
         boolean reverseVideo = mEmulator.getReverseVideo();
         mTextRenderer.setReverseVideo(reverseVideo);
 
-        Paint backgroundPaint =
-                reverseVideo ? mForegroundPaint : mBackgroundPaint;
-        canvas.drawRect(0, 0, w, h, backgroundPaint);
+//        Paint backgroundPaint =
+//                reverseVideo ? mForegroundPaint : mBackgroundPaint;
+//        canvas.drawRect(0, 0, w, h, backgroundPaint);
+
         float x = -mLeftColumn * mCharacterWidth;
         float y = mCharacterHeight + mTopOfScreenMargin;
         int endLine = mTopRow + mRows;
