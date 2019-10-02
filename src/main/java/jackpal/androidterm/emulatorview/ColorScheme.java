@@ -16,8 +16,6 @@
 
 package jackpal.androidterm.emulatorview;
 
-import android.graphics.Color;
-
 /**
  * A class describing a color scheme for an {@link EmulatorView}.
  * <p>
@@ -126,8 +124,7 @@ public class ColorScheme {
      * hex value.
      */
     public int getBackColor() {
-        return Color.argb(0x50, Color.red(backColor), Color.green(backColor), Color.blue(backColor));
-//        return backColor;
+        return backColor;
     }
 
     /**
