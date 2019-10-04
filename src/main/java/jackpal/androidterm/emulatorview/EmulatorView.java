@@ -17,9 +17,13 @@
 package jackpal.androidterm.emulatorview;
 
 import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -31,10 +35,20 @@ import android.text.util.Linkify.MatchFilter;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.ActionMode;
 import android.view.GestureDetector;
+import android.view.HapticFeedbackConstants;
+import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
@@ -42,16 +56,19 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.PopupWindow;
 import android.widget.Scroller;
+import android.widget.Toast;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Hashtable;
 
-import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompat;
-import jackpal.androidterm.emulatorview.compat.ClipboardManagerCompatFactory;
 import jackpal.androidterm.emulatorview.compat.KeycodeConstants;
 import jackpal.androidterm.emulatorview.compat.Patterns;
+import mao.emulatorview.BuildConfig;
+import mao.emulatorview.R;
 
 /**
  * A view on a {@link TermSession}.  Displays the terminal emulator's screen,
@@ -67,7 +84,18 @@ import jackpal.androidterm.emulatorview.compat.Patterns;
 public class EmulatorView extends View implements GestureDetector.OnGestureListener {
     private final static String TAG = "EmulatorView";
     private final static boolean LOG_KEY_EVENTS = false;
-    private final static boolean LOG_IME = false;
+    private final static boolean LOG_IME = true;
+    public static final boolean DEBUG = BuildConfig.DEBUG;
+
+    public static final int MAX_PARCELABLE = 99 * 1024;
+
+    private static final int ID_COPY = android.R.id.copy;
+    private static final int ID_PASTE = android.R.id.paste;
+    private static final int ID_SWITCH_INPUT_METHOD = android.R.id.switchInputMethod;
+
+
+    private static final int MENU_ITEM_ORDER_PASTE = 0;
+    private static final int MENU_ITEM_ORDER_COPY = 1;
 
     /**
      * We defer some initialization until we have been layed out in the view
@@ -158,7 +186,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private boolean mCursorVisible = true;
 
-    private boolean mIsSelectingText = false;
 
     private boolean mBackKeySendsCharacter = false;
     private int mControlKeyCode;
@@ -170,14 +197,20 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     private float mDensity;
 
-    private float mScaledDensity;
     private static final int SELECT_TEXT_OFFSET_Y = -40;
-    private int mSelXAnchor = -1;
-    private int mSelYAnchor = -1;
     private int mSelX1 = -1;
     private int mSelY1 = -1;
     private int mSelX2 = -1;
     private int mSelY2 = -1;
+
+    Drawable mSelectHandleLeft;
+    Drawable mSelectHandleRight;
+    final int[] mTempCoords = new int[2];
+    Rect mTempRect;
+    private SelectionModifierCursorController mSelectionModifierCursorController;
+    private boolean mIsInTextSelectionMode = false;
+    ActionMode mTextActionMode;
+    private ActionMode.Callback mCustomSelectionActionModeCallback;
 
     /**
      * Routing alt and meta keyCodes away from the IME allows Alt key processing to work on
@@ -473,12 +506,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     private UpdateCallback mUpdateNotify = new UpdateCallback() {
         public void onUpdate() {
-            if (mIsSelectingText) {
-                int rowShift = mEmulator.getScrollCounter();
-                mSelY1 -= rowShift;
-                mSelY2 -= rowShift;
-                mSelYAnchor -= rowShift;
-            }
             mEmulator.clearScrollCounter();
             ensureCursorVisible();
             invalidate();
@@ -572,7 +599,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mTextSize = (int) (mTextSize * metrics.density);
         }
         mDensity = metrics.density;
-        mScaledDensity = metrics.scaledDensity;
     }
 
     /**
@@ -638,6 +664,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             private int mSelectedTextEnd;
 
             private void sendText(CharSequence text) {
+                stopTextSelectionMode();
                 int n = text.length();
                 char c;
                 try {
@@ -662,6 +689,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             }
 
             private void mapAndSend(int c) throws IOException {
+                if (LOG_IME) Log.d(TAG, "mapAndSend: codePoint " + Integer.toHexString(c));
                 int result = mKeyListener.mapControlChar(c);
                 if (result < TermKeyListener.KEYCODE_OFFSET) {
                     mTermSession.write(result);
@@ -750,7 +778,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     Log.w(TAG, "getTextBeforeCursor(" + n + "," + flags + ")");
                 }
                 int len = Math.min(n, mCursor);
-                if (len <= 0 || mCursor < 0 || mCursor >= mImeBuffer.length()) {
+                if (len <= 0 || mCursor >= mImeBuffer.length()) {
                     return "";
                 }
                 return mImeBuffer.substring(mCursor - len, mCursor);
@@ -1115,9 +1143,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     // Begin GestureDetector.OnGestureListener methods
 
     public boolean onSingleTapUp(MotionEvent e) {
+        stopTextSelectionMode();
         if (mExtGestureListener != null && mExtGestureListener.onSingleTapUp(e)) {
             return true;
         }
+
 
         if (isMouseTrackingActive()) {
             sendMouseEventCode(e, 0); // BTN1 press
@@ -1128,9 +1158,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return true;
     }
 
-    public void onLongPress(MotionEvent e) {
-        // XXX hook into external gesture listener
-        showContextMenu();
+    public void onLongPress(MotionEvent ev) {
+        mSelX1 = mSelX2 = getCursorX(ev.getX());
+        mSelY1 = mSelY2 = getCursorY(ev.getY(), ev.isFromSource(InputDevice.SOURCE_MOUSE));
+
+        startTextSelectionMode();
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
     }
 
     public boolean onScroll(MotionEvent e1, MotionEvent e2,
@@ -1219,53 +1252,26 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        if (mIsSelectingText) {
-            return onTouchEventWhileSelectingText(ev);
-        } else {
-            return mGestureDetector.onTouchEvent(ev);
-        }
+        updateFloatingToolbarVisibility(ev);
+        return mGestureDetector.onTouchEvent(ev);
     }
 
-    private boolean onTouchEventWhileSelectingText(MotionEvent ev) {
-        int action = ev.getAction();
-        int cx = (int) (ev.getX() / mCharacterWidth);
-        int cy = Math.max(0,
-                (int) ((ev.getY() + SELECT_TEXT_OFFSET_Y * mScaledDensity)
-                        / mCharacterHeight) + mTopRow);
-        switch (action) {
-            case MotionEvent.ACTION_DOWN:
-                mSelXAnchor = cx;
-                mSelYAnchor = cy;
-                mSelX1 = cx;
-                mSelY1 = cy;
-                mSelX2 = mSelX1;
-                mSelY2 = mSelY1;
-                break;
-            case MotionEvent.ACTION_MOVE:
-            case MotionEvent.ACTION_UP:
-                int minx = Math.min(mSelXAnchor, cx);
-                int maxx = Math.max(mSelXAnchor, cx);
-                int miny = Math.min(mSelYAnchor, cy);
-                int maxy = Math.max(mSelYAnchor, cy);
-                mSelX1 = minx;
-                mSelY1 = miny;
-                mSelX2 = maxx;
-                mSelY2 = maxy;
-                if (action == MotionEvent.ACTION_UP) {
-                    ClipboardManagerCompat clip = ClipboardManagerCompatFactory
-                            .getManager(getContext().getApplicationContext());
-                    clip.setText(getSelectedText().trim());
-                    toggleSelectingText();
-                }
-                invalidate();
-                break;
-            default:
-                toggleSelectingText();
-                invalidate();
-                break;
-        }
-        return true;
+    private int getCursorX(float x) {
+        return (int) (x / mCharacterWidth);
     }
+
+    private int getCursorY(float y, boolean isMouse) {
+        return (int) (((y + (isMouse ? 0 : SELECT_TEXT_OFFSET_Y)) / mCharacterHeight) + mTopRow);
+    }
+
+    private int getPointX(int cx) {
+        return Math.round(cx * mCharacterWidth);
+    }
+
+    private int getPointY(int cy) {
+        return Math.round((cy - mTopRow) * mCharacterHeight);
+    }
+
 
     /**
      * Called when a key is pressed in the view.
@@ -1279,6 +1285,17 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (LOG_KEY_EVENTS) {
             Log.w(TAG, "onKeyDown " + keyCode);
         }
+
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (mIsInTextSelectionMode) {
+                stopTextSelectionMode();
+                return true;
+            }
+        }
+
+        stopTextSelectionMode();
+
         if (handleControlKey(keyCode, true)) {
             return true;
         } else if (handleFnKey(keyCode, true)) {
@@ -1375,7 +1392,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return super.onKeyPreIme(keyCode, event);
     }
 
-    ;
 
     private boolean handleControlKey(int keyCode, boolean down) {
         if (keyCode == mControlKeyCode) {
@@ -1541,6 +1557,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         int linkLinesToSkip = 0; //for multi-line links
 
+        int selY1 = this.mSelY1;
+        int selY2 = this.mSelY2;
         for (int i = mTopRow; i < endLine; i++) {
             int cursorX = -1;
             if (i == cy && cursorVisible) {
@@ -1548,11 +1566,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             }
             int selx1 = -1;
             int selx2 = -1;
-            if (i >= mSelY1 && i <= mSelY2) {
-                if (i == mSelY1) {
+            if (i >= selY1 && i <= selY2) {
+                if (i == selY1) {
                     selx1 = mSelX1;
                 }
-                if (i == mSelY2) {
+                if (i == selY2) {
                     selx2 = mSelX2;
                 } else {
                     selx2 = mColumns;
@@ -1566,6 +1584,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             //createLinks always returns at least 1
             --linkLinesToSkip;
+        }
+
+        if (mSelectionModifierCursorController != null &&
+                mSelectionModifierCursorController.isActive()) {
+            mSelectionModifierCursorController.updatePosition();
         }
     }
 
@@ -1582,26 +1605,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
     }
 
-    /**
-     * Toggle text selection mode in the view.
-     */
-    public void toggleSelectingText() {
-        mIsSelectingText = !mIsSelectingText;
-        setVerticalScrollBarEnabled(!mIsSelectingText);
-        if (!mIsSelectingText) {
-            mSelX1 = -1;
-            mSelY1 = -1;
-            mSelX2 = -1;
-            mSelY2 = -1;
-        }
-    }
-
-    /**
-     * Whether the view is currently in text selection mode.
-     */
-    public boolean getSelectingText() {
-        return mIsSelectingText;
-    }
 
     /**
      * Get selected text.
@@ -1711,47 +1714,102 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return null;
     }
 
-/*
+    /**
+     * A CursorController instance can be used to control a cursor in the text.
+     * It is not used outside of {@link EmulatorView}.
+     */
+    private interface CursorController extends ViewTreeObserver.OnTouchModeChangeListener {
+        /**
+         * Makes the cursor controller visible on screen. Will be drawn by {@link #draw(Canvas)}.
+         * See also {@link #hide()}.
+         */
+        void show();
+
+        /**
+         * Hide the cursor controller from screen.
+         * See also {@link #show()}.
+         */
+        void hide();
+
+        /**
+         * @return true if the CursorController is currently visible
+         */
+        boolean isActive();
+
+        /**
+         * Update the controller's position.
+         */
+        void updatePosition(HandleView handle, int x, int y);
+
+        void updatePosition();
+
+        /**
+         * This method is called by {@link #onTouchEvent(MotionEvent)} and gives the controller
+         * a chance to become active and/or visible.
+         *
+         * @param event The touch event
+         */
+        boolean onTouchEvent(MotionEvent event);
+
+        /**
+         * Called when the view is detached from window. Perform house keeping task, such as
+         * stopping Runnable thread that would otherwise keep a reference on the context, thus
+         * preventing the activity to be recycled.
+         */
+        void onDetached();
+    }
+
     private class HandleView extends View {
-        private boolean mPositionOnTop = false;
         private Drawable mDrawable;
         private PopupWindow mContainer;
-        private int mPositionX;
-        private int mPositionY;
+        private int mPointX;
+        private int mPointY;
         private CursorController mController;
         private boolean mIsDragging;
         private float mTouchToWindowOffsetX;
         private float mTouchToWindowOffsetY;
         private float mHotspotX;
         private float mHotspotY;
-        private int mHeight;
         private float mTouchOffsetY;
         private int mLastParentX;
         private int mLastParentY;
 
+
         public static final int LEFT = 0;
-        public static final int CENTER = 1;
         public static final int RIGHT = 2;
 
-        public HandleView(CursorController controller, int pos) {
+        public HandleView(CursorController controller, int orientation) {
             super(EmulatorView.this.getContext());
             mController = controller;
             mContainer = new PopupWindow(EmulatorView.this.getContext(), null,
-                    com.android.internal.R.attr.textSelectHandleWindowStyle);
-//            mContainer.setSplitTouchEnabled(true);// Jota Text Editor
+                    android.R.attr.textSelectHandleWindowStyle);
+            mContainer.setSplitTouchEnabled(true);
             mContainer.setClippingEnabled(false);
-//            mContainer.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL);// Jota Text Editor
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                mContainer.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL);
+            }
+            mContainer.setWidth(ViewGroup.LayoutParams.WRAP_CONTENT);
+            mContainer.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
 
-            setOrientation(pos);
+            setOrientation(orientation);
         }
 
-        public void setOrientation(int pos) {
+        public void setOrientation(int orientation) {
             int handleWidth;
-            switch (pos) {
+            switch (orientation) {
                 case LEFT: {
                     if (mSelectHandleLeft == null) {
-                        mSelectHandleLeft = mContext.getResources().getDrawable(R.drawable.text_select_handle_left);
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            mSelectHandleLeft = getContext().getDrawable(
+                                    R.drawable.text_select_handle_left_material);
+                        } else {
+                            mSelectHandleLeft = getContext().getResources().getDrawable(
+                                    R.drawable.text_select_handle_left_material);
+
+                        }
                     }
+                    //
                     mDrawable = mSelectHandleLeft;
                     handleWidth = mDrawable.getIntrinsicWidth();
                     mHotspotX = (handleWidth * 3) / 4;
@@ -1760,7 +1818,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
                 case RIGHT: {
                     if (mSelectHandleRight == null) {
-                        mSelectHandleRight = mContext.getResources().getDrawable(R.drawable.text_select_handle_right);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            mSelectHandleRight = getContext().getDrawable(
+                                    R.drawable.text_select_handle_right_material);
+                        } else {
+                            mSelectHandleRight = getContext().getResources().getDrawable(
+                                    R.drawable.text_select_handle_right_material);
+                        }
                     }
                     mDrawable = mSelectHandleRight;
                     handleWidth = mDrawable.getIntrinsicWidth();
@@ -1768,23 +1832,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     break;
                 }
 
-                case CENTER:
-                default: {
-                    if (mSelectHandleCenter == null) {
-                        mSelectHandleCenter = mContext.getResources().getDrawable(R.drawable.text_select_handle_middle);
-                    }
-                    mDrawable = mSelectHandleCenter;
-                    handleWidth = mDrawable.getIntrinsicWidth();
-                    mHotspotX = handleWidth / 2;
-                    break;
-                }
             }
 
             final int handleHeight = mDrawable.getIntrinsicHeight();
 
             mTouchOffsetY = -handleHeight * 0.3f;
             mHotspotY = 0;
-            mHeight = handleHeight;
             invalidate();
         }
 
@@ -1800,10 +1853,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 return;
             }
             mContainer.setContentView(this);
-            final int[] coords = new int[2];
+            final int[] coords = mTempCoords;
             EmulatorView.this.getLocationInWindow(coords);
-            coords[0] += mPositionX;
-            coords[1] += mPositionY;
+            coords[0] += mPointX;
+            coords[1] += mPointY;
             mContainer.showAtLocation(EmulatorView.this, 0, coords[0], coords[1]);
         }
 
@@ -1822,42 +1875,48 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 return true;
             }
 
-
             final EmulatorView hostView = EmulatorView.this;
             final int left = 0;
             final int right = hostView.getWidth();
             final int top = 0;
             final int bottom = hostView.getHeight();
 
-            final Rect clip = new Rect();
-            clip.left = left;
-            clip.top = top;
-            clip.right = right;
-            clip.bottom = bottom;
+            if (mTempRect == null) {
+                mTempRect = new Rect();
+            }
+            final Rect clip = mTempRect;
+            clip.left = left + EmulatorView.this.getPaddingLeft();
+            clip.top = top + EmulatorView.this.getPaddingTop();
+            clip.right = right - EmulatorView.this.getPaddingRight();
+            clip.bottom = bottom - EmulatorView.this.getPaddingBottom();
 
             final ViewParent parent = hostView.getParent();
             if (parent == null || !parent.getChildVisibleRect(hostView, clip, null)) {
                 return false;
             }
 
-            final int[] coords = new int[2];
+            final int[] coords = mTempCoords;
             hostView.getLocationInWindow(coords);
-            final int posX = coords[0] + mPositionX + (int) mHotspotX;
-            final int posY = coords[1] + mPositionY + (int) mHotspotY;
+            final int posX = coords[0] + mPointX + (int) mHotspotX;
+            final int posY = coords[1] + mPointY + (int) mHotspotY;
+
+//            System.out.println("cursor x=" + posX + "   y=" + posY + "   hostclip x=" + clip.left + "   y=" + clip.bottom);
 
             return posX >= clip.left && posX <= clip.right &&
                     posY >= clip.top && posY <= clip.bottom;
         }
 
         private void moveTo(int x, int y) {
-            mPositionX = x - EmulatorView.this.getScrollX();
-            mPositionY = y - EmulatorView.this.getScrollY();
+            mPointX = x;
+            mPointY = y;
             if (isPositionVisible()) {
                 int[] coords = null;
                 if (mContainer.isShowing()) {
-                    coords = new int[2];
+                    coords = mTempCoords;
                     EmulatorView.this.getLocationInWindow(coords);
-                    mContainer.update(coords[0] + mPositionX, coords[1] + mPositionY,
+                    int x1 = coords[0] + mPointX;
+                    int y1 = coords[1] + mPointY;
+                    mContainer.update(x1, y1,
                             getWidth(), getHeight());
                 } else {
                     show();
@@ -1865,7 +1924,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
                 if (mIsDragging) {
                     if (coords == null) {
-                        coords = new int[2];
+                        coords = mTempCoords;
                         EmulatorView.this.getLocationInWindow(coords);
                     }
                     if (coords[0] != mLastParentX || coords[1] != mLastParentY) {
@@ -1876,25 +1935,32 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     }
                 }
             } else {
-                hide();
+                if (isShowing()) {
+                    hide();
+                }
             }
         }
 
         @Override
         public void onDraw(Canvas c) {
-            mDrawable.setBounds(0, 0, 100, 100);
+            final int drawWidth = mDrawable.getIntrinsicWidth();
+            int height = mDrawable.getIntrinsicHeight();
+            mDrawable.setBounds(0, 0, drawWidth, height);
             mDrawable.draw(c);
+
         }
 
+        @SuppressLint("ClickableViewAccessibility")
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
-            switch (ev.getAction() & MotionEvent.ACTION_MASK) {
+            updateFloatingToolbarVisibility(ev);
+            switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN: {
                     final float rawX = ev.getRawX();
                     final float rawY = ev.getRawY();
-                    mTouchToWindowOffsetX = rawX - mPositionX;
-                    mTouchToWindowOffsetY = rawY - mPositionY;
-                    final int[] coords = new int[2];
+                    mTouchToWindowOffsetX = rawX - mPointX;
+                    mTouchToWindowOffsetY = rawY - mPointY;
+                    final int[] coords = mTempCoords;
                     EmulatorView.this.getLocationInWindow(coords);
                     mLastParentX = coords[0];
                     mLastParentY = coords[1];
@@ -1905,10 +1971,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 case MotionEvent.ACTION_MOVE: {
                     final float rawX = ev.getRawX();
                     final float rawY = ev.getRawY();
-                    final float newPosX = rawX - mTouchToWindowOffsetX + mHotspotX;            // Jota Text Editor
+
+                    final float newPosX = rawX - mTouchToWindowOffsetX + mHotspotX;
                     final float newPosY = rawY - mTouchToWindowOffsetY + mHotspotY + mTouchOffsetY;
 
                     mController.updatePosition(this, Math.round(newPosX), Math.round(newPosY));
+
 
                     break;
                 }
@@ -1920,32 +1988,451 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return true;
         }
 
+
         public boolean isDragging() {
             return mIsDragging;
         }
 
-        void positionAtCursor(final int offset, boolean bottom) {
-            final int width = mDrawable.getIntrinsicWidth();
-            final int height = mDrawable.getIntrinsicHeight();
-            final int line = mLayout.getLineForOffset(offset);
-            final int lineTop = mLayout.getLineTop(line);
-            final int lineBottom = mLayout.getLineBottom(line);
+        void positionAtCursor(final int cx, final int cy) {
+            int left = (int) (getPointX(cx) - mHotspotX);
+            int bottom = getPointY(cy + 1);
+            moveTo(left, bottom);
+        }
+    }
 
-            TranscriptScreen screen = mEmulator.getScreen();
-            screen.scroll();
+    private class SelectionModifierCursorController implements CursorController {
+        // The cursor controller images
+        private HandleView mStartHandle, mEndHandle;
+        // Whether selection anchors are active
+        private boolean mIsShowing;
 
-            final Rect bounds = new Rect();
-            bounds.left = (int) (mLayout.getPrimaryHorizontal(offset) - mHotspotX)
-                    + EmulatorView.this.getScrollX();            // Jota Text Editor
-            bounds.top = (bottom ? lineBottom : lineTop - mHeight) + EmulatorView.this.getScrollY();
+        SelectionModifierCursorController() {
+            mStartHandle = new HandleView(this, HandleView.LEFT);
+            mEndHandle = new HandleView(this, HandleView.RIGHT);
+        }
 
-            bounds.right = bounds.left + width;
-            bounds.bottom = bounds.top + height;
+        public void show() {
+            mIsShowing = true;
+            updatePosition();
+            mStartHandle.show();
+            mEndHandle.show();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                final TextActionModeCallback callback = new TextActionModeCallback();
+                mTextActionMode = startActionMode(new ActionMode.Callback2() {
+                    @Override
+                    public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+                        return callback.onCreateActionMode(mode, menu);
+                    }
 
-            convertFromViewportToContentCoordinates(bounds);
-            moveTo(bounds.left, bounds.top);
+                    @Override
+                    public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+                        return callback.onPrepareActionMode(mode, menu);
+                    }
+
+                    @Override
+                    public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+                        return callback.onActionItemClicked(mode, item);
+                    }
+
+                    @Override
+                    public void onDestroyActionMode(ActionMode mode) {
+                        callback.onDestroyActionMode(mode);
+                    }
+
+                    @Override
+                    public void onGetContentRect(ActionMode mode, View view, Rect outRect) {
+                        int x1 = getPointX(mSelX1);
+                        int x2 = getPointX(mSelX2 + 1);
+                        int y1 = getPointY(mSelY1);
+                        int y2 = getPointY(mSelY2 + 1);
+                        int height = mStartHandle.getHeight();
+                        if (x1 > x2) {
+                            int tmp = x1;
+                            x1 = x2;
+                            x2 = tmp;
+                        }
+                        outRect.set(x1, y1 + height, x2, y2 + height);
+                    }
+                }, ActionMode.TYPE_FLOATING);
+            } else {
+                mTextActionMode = startActionMode(new TextActionModeCallback());
+            }
+        }
+
+        public void hide() {
+            mStartHandle.hide();
+            mEndHandle.hide();
+            mIsShowing = false;
+            stopTextActionMode();
+
+        }
+
+        public boolean isActive() {
+            return mIsShowing;
+        }
+
+        public void updatePosition(HandleView handle, int x, int y) {
+            if (DEBUG)
+                Log.d(TAG, "updatePosition: " + x + "  " + y + "   " + mTopRow + "   "
+                        + mEmulator.getScreen().getActiveRows() + "   " + EmulatorView.this.getHeight());
+            final int scrollRows = getScrollRows();
+            if (y < mCharacterHeight) {//向上滚动
+                mTopRow--;
+                if (mTopRow < -scrollRows) {
+                    mTopRow = -scrollRows;
+                }
+            } else if (y + 2 * mCharacterHeight > EmulatorView.this.getHeight()) {//向下滚动
+                mTopRow++;
+                if (mTopRow > 0) {
+                    mTopRow = 0;
+                }
+            }
+            if (handle == mStartHandle) {
+                mSelX1 = getCursorX(x);
+                mSelY1 = getCursorY(y, false);
+                if (mSelX1 < 0) {
+                    mSelX1 = 0;
+                }
+                if (mSelY1 < -scrollRows) {
+                    mSelY1 = -scrollRows;
+                } else if (mSelY1 > mRows - 1) {
+                    mSelY1 = mRows - 1;
+                }
+                if (DEBUG) Log.d(TAG, "updatePosition: left " + mSelX1 + "   " + mSelY1);
+
+                if (mSelY1 > mSelY2) {
+                    mSelY2 = mSelY1;
+                }
+                if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
+                    mSelX2 = mSelX1;
+                }
+            } else {
+                mSelX2 = getCursorX(x);
+                mSelY2 = getCursorY(y, false);
+                if (mSelX2 < 0) {
+                    mSelX2 = 0;
+                }
+                if (mSelY2 < -scrollRows) {
+                    mSelY2 = -scrollRows;
+                } else if (mSelY2 > mRows - 1) {
+                    mSelY2 = mRows - 1;
+                }
+
+                if (mSelY1 > mSelY2) {
+                    mSelY1 = mSelY2;
+                }
+                if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
+                    mSelX1 = mSelX2;
+                }
+            }
+
+            invalidate();
+        }
+
+        public void updatePosition() {
+            if (!isActive()) {
+                return;
+            }
+
+            mStartHandle.positionAtCursor(mSelX1, mSelY1);
+
+            mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2);
+//            }
+            invalidateActionMode();
+
+        }
+
+        public boolean onTouchEvent(MotionEvent event) {
+
+            return false;
+        }
+
+
+        /**
+         * @return true iff this controller is currently used to move the selection start.
+         */
+        public boolean isSelectionStartDragged() {
+            return mStartHandle.isDragging();
+        }
+
+        public boolean isSelectionEndDragged() {
+            return mEndHandle.isDragging();
+        }
+
+        public void onTouchModeChanged(boolean isInTouchMode) {
+            if (!isInTouchMode) {
+                hide();
+            }
+        }
+
+        @Override
+        public void onDetached() {
+        }
+    }
+
+    private int getScrollRows() {
+        return mEmulator.getScreen().getActiveRows() - mRows;
+    }
+
+
+    SelectionModifierCursorController getSelectionController() {
+
+
+        if (mSelectionModifierCursorController == null) {
+            mSelectionModifierCursorController = new SelectionModifierCursorController();
+
+            final ViewTreeObserver observer = getViewTreeObserver();
+            if (observer != null) {
+                observer.addOnTouchModeChangeListener(mSelectionModifierCursorController);
+            }
+        }
+
+        return mSelectionModifierCursorController;
+    }
+
+    private void hideSelectionModifierCursorController() {
+        if (mSelectionModifierCursorController != null && mSelectionModifierCursorController.isActive()) {
+            mSelectionModifierCursorController.hide();
+        }
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+
+        if (mSelectionModifierCursorController != null) {
+            getViewTreeObserver().addOnTouchModeChangeListener(mSelectionModifierCursorController);
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+
+        if (mSelectionModifierCursorController != null) {
+            getViewTreeObserver().removeOnTouchModeChangeListener(mSelectionModifierCursorController);
+        }
+        if (mSelectionModifierCursorController != null) {
+            mSelectionModifierCursorController.onDetached();
+        }
+    }
+
+    private void startTextSelectionMode() {
+        if (!requestFocus()) {
+            return;
+        }
+
+        getSelectionController().show();
+
+        mIsInTextSelectionMode = true;
+        invalidate();
+    }
+
+    private void stopTextSelectionMode() {
+        if (mIsInTextSelectionMode) {
+            hideSelectionModifierCursorController();
+            mSelX1 = mSelY1 = mSelX2 = mSelY2 = -1;
+            mIsInTextSelectionMode = false;
+            invalidate();
+        }
+    }
+
+    protected void stopTextActionMode() {
+        if (mTextActionMode != null) {
+            // This will hide the mSelectionModifierCursorController
+            mTextActionMode.finish();
+        }
+    }
+
+    private void invalidateActionMode() {
+        if (mTextActionMode != null) {
+            mTextActionMode.invalidate();
+        }
+    }
+
+    private boolean canPaste() {
+        return ((ClipboardManager) getContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE))
+                .hasPrimaryClip();
+    }
+
+    private class TextActionModeCallback implements ActionMode.Callback {
+
+        TextActionModeCallback() {
+        }
+
+        @Override
+        public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+
+            mode.setTitle(null);
+            mode.setSubtitle(null);
+            mode.setTitleOptionalHint(true);
+
+            menu.add(Menu.NONE, ID_COPY, MENU_ITEM_ORDER_COPY,
+                    R.string.copy)
+                    .setAlphabeticShortcut('c')
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+
+            if (canPaste()) {
+                menu.add(Menu.NONE, ID_PASTE, MENU_ITEM_ORDER_PASTE,
+                        R.string.paste)
+                        .setAlphabeticShortcut('v')
+                        .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+            }
+
+            ActionMode.Callback customCallback = getCustomCallback();
+            if (customCallback != null) {
+                if (!customCallback.onCreateActionMode(mode, menu)) {
+                    stopTextSelectionMode();
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private ActionMode.Callback getCustomCallback() {
+            return mCustomSelectionActionModeCallback;
+        }
+
+        @Override
+        public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+
+            ActionMode.Callback customCallback = getCustomCallback();
+            if (customCallback != null) {
+                return customCallback.onPrepareActionMode(mode, menu);
+            }
+            return true;
+        }
+
+
+        @Override
+        public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+
+            ActionMode.Callback customCallback = getCustomCallback();
+            if (customCallback != null && customCallback.onActionItemClicked(mode, item)) {
+                return true;
+            }
+
+            return onTextContextMenuItem(item.getItemId());
+        }
+
+        @Override
+        public void onDestroyActionMode(ActionMode mode) {
+            mTextActionMode = null;
         }
 
     }
-*/
+
+    /**
+     * If provided, this ActionMode.Callback will be used to create the ActionMode when text
+     * selection is initiated in this View.
+     *
+     * <p>The standard implementation populates the menu with a subset of Select All, Cut, Copy,
+     * Paste, Replace and Share actions, depending on what this View supports.
+     *
+     * <p>A custom implementation can add new entries in the default menu in its
+     * {@link android.view.ActionMode.Callback#onPrepareActionMode(ActionMode, android.view.Menu)}
+     * method. The default actions can also be removed from the menu using
+     * {@link android.view.Menu#removeItem(int)} and passing {@link android.R.id#selectAll},
+     * {@link android.R.id#cut}, {@link android.R.id#copy}, {@link android.R.id#paste},
+     * {@link android.R.id#replaceText} or {@link android.R.id#shareText} ids as parameters.
+     *
+     * <p>Returning false from
+     * {@link android.view.ActionMode.Callback#onCreateActionMode(ActionMode, android.view.Menu)}
+     * will prevent the action mode from being started.
+     *
+     * <p>Action click events should be handled by the custom implementation of
+     * {@link android.view.ActionMode.Callback#onActionItemClicked(ActionMode,
+     * android.view.MenuItem)}.
+     *
+     * <p>Note that text selection mode is not started when a TextView receives focus and the
+     * {@link android.R.attr#selectAllOnFocus} flag has been set. The content is highlighted in
+     * that case, to allow for quick replacement.
+     */
+    public void setCustomSelectionActionModeCallback(ActionMode.Callback actionModeCallback) {
+        mCustomSelectionActionModeCallback = actionModeCallback;
+    }
+
+    public boolean onTextContextMenuItem(int id) {
+
+        if (id == ID_COPY) {
+            String selectedText = getSelectedText();
+            if (selectedText.length() > MAX_PARCELABLE) {
+                Toast.makeText(getContext(), R.string.toast_overflow_of_limit, Toast.LENGTH_LONG).show();
+            } else {
+                ClipData plainText = ClipData.newPlainText("text", selectedText);
+                ClipboardManager clipboard =
+                        (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                try {
+                    clipboard.setPrimaryClip(plainText);
+                } catch (Throwable ignored) {
+                }
+                stopTextSelectionMode();
+                Toast.makeText(getContext(), R.string.copied, Toast.LENGTH_LONG).show();
+            }
+            return true;
+        } else if (id == ID_PASTE) {
+            ClipboardManager clipboard =
+                    (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clipData = clipboard.getPrimaryClip();
+            if (clipData != null && clipData.getItemCount() > 0) {
+                ClipData.Item item = clipData.getItemAt(0);
+
+                CharSequence text = item.getText();
+                mTermSession.write(text.toString());
+
+                stopTextSelectionMode();
+            }
+            return true;
+        } else if (id == ID_SWITCH_INPUT_METHOD) {
+            InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showInputMethodPicker();
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private final Runnable mShowFloatingToolbar = new Runnable() {
+        @Override
+        public void run() {
+            if (mTextActionMode != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    mTextActionMode.hide(0);  // hide off.
+                }
+            }
+        }
+    };
+
+    void hideFloatingToolbar(int duration) {
+        if (mTextActionMode != null) {
+            removeCallbacks(mShowFloatingToolbar);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                mTextActionMode.hide(duration);
+            }
+        }
+    }
+
+    private void showFloatingToolbar() {
+        if (mTextActionMode != null) {
+            int delay = ViewConfiguration.getDoubleTapTimeout();
+            postDelayed(mShowFloatingToolbar, delay);
+        }
+    }
+
+    private void updateFloatingToolbarVisibility(MotionEvent event) {
+        if (mTextActionMode != null) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    hideFloatingToolbar(-1);
+                    break;
+                case MotionEvent.ACTION_UP:  // fall through
+                case MotionEvent.ACTION_CANCEL:
+                    showFloatingToolbar();
+            }
+        }
+    }
 }

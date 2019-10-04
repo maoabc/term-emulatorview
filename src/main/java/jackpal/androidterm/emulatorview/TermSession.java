@@ -84,12 +84,12 @@ public class TermSession {
     private ByteQueue mWriteQueue;
     private Handler mWriterHandler;
 
-    private CharBuffer mWriteCharBuffer;
-    private ByteBuffer mWriteByteBuffer;
-    private CharsetEncoder mUTF8Encoder;
+    private final char[] mWriteCharBuffer;
+    private final ByteBuffer mWriteByteBuffer;
+    private final CharsetEncoder mUTF8Encoder;
 
     // Number of rows in the transcript
-    private static final int TRANSCRIPT_ROWS = 10000;
+    private static final int TRANSCRIPT_ROWS = 5000;
 
     private static final int NEW_INPUT = 1;
     private static final int NEW_OUTPUT = 2;
@@ -140,7 +140,7 @@ public class TermSession {
     }
 
     public TermSession(final boolean exitOnEOF) {
-        mWriteCharBuffer = CharBuffer.allocate(2);
+        mWriteCharBuffer = new char[2];
         mWriteByteBuffer = ByteBuffer.allocate(4);
         mUTF8Encoder = Charset.forName("UTF-8").newEncoder();
         mUTF8Encoder.onMalformedInput(CodingErrorAction.REPLACE);
@@ -219,7 +219,7 @@ public class TermSession {
                 }
 
                 try {
-                    writeQueue.read(buffer, 0, bytesToWrite);
+                    bytesToWrite = writeQueue.read(buffer, 0, bytesToWrite);
                     termOut.write(buffer, 0, bytesToWrite);
                     termOut.flush();
                 } catch (IOException e) {
@@ -246,7 +246,7 @@ public class TermSession {
      * @param rows    The number of rows in the terminal window.
      */
     public void initializeEmulator(int columns, int rows) {
-        mTranscriptScreen = new TranscriptScreen(columns, TRANSCRIPT_ROWS, rows, mColorScheme);
+        mTranscriptScreen = new TranscriptScreen(columns, TRANSCRIPT_ROWS, rows);
         mEmulator = new TerminalEmulator(this, mTranscriptScreen, columns, rows, mColorScheme);
         mEmulator.setDefaultUTF8Mode(mDefaultUTF8Mode);
         mEmulator.setKeyListener(mKeyListener);
@@ -325,16 +325,19 @@ public class TermSession {
             return;
         }
 
-        CharBuffer charBuf = mWriteCharBuffer;
-        CharsetEncoder encoder = mUTF8Encoder;
 
-        charBuf.clear();
-        byteBuf.clear();
-        Character.toChars(codePoint, charBuf.array(), 0);
+        CharsetEncoder encoder = mUTF8Encoder;
         encoder.reset();
-        encoder.encode(charBuf, byteBuf, true);
+
+        char[] dst = this.mWriteCharBuffer;
+        int len = Character.toChars(codePoint, dst, 0);
+
+        byteBuf.clear();
+        encoder.encode(CharBuffer.wrap(dst, 0, len), byteBuf, true);
         encoder.flush(byteBuf);
-        write(byteBuf.array(), 0, byteBuf.position() - 1);
+
+        write(byteBuf.array(), 0, byteBuf.position());
+
     }
 
     /* Notify the writer thread that there's new output waiting */

@@ -1,3 +1,6 @@
 <resources>
-    <string name="app_name">emulatorview</string>
+    <string name="copy">Copy</string>
+    <string name="paste">Paste</string>
+    <string name="copied">Copied</string>
+    <string name="toast_overflow_of_limit">Text too long</string>
 </resources>

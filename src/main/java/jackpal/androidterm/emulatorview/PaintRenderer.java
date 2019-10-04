@@ -59,12 +59,14 @@ class PaintRenderer extends BaseTextRenderer {
         if (blink && backColor < 8) {
             backColor += 8;
         }
-        mTextPaint.setColor(mPalette[backColor]);
+        Paint textPaint = this.mTextPaint;
+
+        textPaint.setColor(mPalette[backColor]);
 
         float left = x + lineOffset * mCharWidth;
         canvas.drawRect(left, y + mCharAscent - mCharDescent,
                 left + runWidth * mCharWidth, y,
-                mTextPaint);
+                textPaint);
 
         boolean cursorVisible = lineOffset <= cursorOffset && cursorOffset < (lineOffset + runWidth);
         float cursorX = 0;
@@ -78,10 +80,10 @@ class PaintRenderer extends BaseTextRenderer {
             boolean bold = (effect & TextStyle.fxBold) != 0;
             boolean underline = (effect & TextStyle.fxUnderline) != 0;
             if (bold) {
-                mTextPaint.setFakeBoldText(true);
+                textPaint.setFakeBoldText(true);
             }
             if (underline) {
-                mTextPaint.setUnderlineText(true);
+                textPaint.setUnderlineText(true);
             }
             int textPaintColor;
             if (foreColor < 8 && bold) {
@@ -90,7 +92,7 @@ class PaintRenderer extends BaseTextRenderer {
             } else {
                 textPaintColor = mPalette[foreColor];
             }
-            mTextPaint.setColor(textPaintColor);
+            textPaint.setColor(textPaintColor);
 
             float textOriginY = y - mCharDescent;
 
@@ -99,27 +101,27 @@ class PaintRenderer extends BaseTextRenderer {
                 int countBeforeCursor = cursorIndex - index;
                 int countAfterCursor = count - (countBeforeCursor + cursorIncr);
                 if (countBeforeCursor > 0){
-                    canvas.drawText(text, index, countBeforeCursor, left, textOriginY, mTextPaint);
+                    canvas.drawText(text, index, countBeforeCursor, left, textOriginY, textPaint);
                 }
                 // Text at cursor
-                mTextPaint.setColor(mPalette[TextStyle.ciCursorForeground]);
+                textPaint.setColor(mPalette[TextStyle.ciCursorForeground]);
                 canvas.drawText(text, cursorIndex, cursorIncr, cursorX,
-                        textOriginY, mTextPaint);
+                        textOriginY, textPaint);
                 // Text after cursor
                 if (countAfterCursor > 0) {
-                    mTextPaint.setColor(textPaintColor);
+                    textPaint.setColor(textPaintColor);
                     canvas.drawText(text, cursorIndex + cursorIncr, countAfterCursor,
                             cursorX + cursorWidth * mCharWidth,
-                            textOriginY, mTextPaint);
+                            textOriginY, textPaint);
                 }
             } else {
-                canvas.drawText(text, index, count, left, textOriginY, mTextPaint);
+                canvas.drawText(text, index, count, left, textOriginY, textPaint);
             }
             if (bold) {
-                mTextPaint.setFakeBoldText(false);
+                textPaint.setFakeBoldText(false);
             }
             if (underline) {
-                mTextPaint.setUnderlineText(false);
+                textPaint.setUnderlineText(false);
             }
         }
     }
