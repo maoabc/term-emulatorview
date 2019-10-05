@@ -84,7 +84,7 @@ import mao.emulatorview.R;
 public class EmulatorView extends View implements GestureDetector.OnGestureListener {
     private final static String TAG = "EmulatorView";
     private final static boolean LOG_KEY_EVENTS = false;
-    private final static boolean LOG_IME = true;
+    private final static boolean LOG_IME = false;
     public static final boolean DEBUG = BuildConfig.DEBUG;
 
     public static final int MAX_PARCELABLE = 99 * 1024;
@@ -1159,8 +1159,19 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     public void onLongPress(MotionEvent ev) {
+
         mSelX1 = mSelX2 = getCursorX(ev.getX());
         mSelY1 = mSelY2 = getCursorY(ev.getY(), ev.isFromSource(InputDevice.SOURCE_MOUSE));
+        TranscriptScreen screen = mEmulator.getScreen();
+        if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1))) {
+            // Selecting something other than whitespace. Expand to word.
+            while (mSelX1 > 0 && !"".equals(screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) {
+                mSelX1--;
+            }
+            while (mSelX2 < mColumns - 1 && !"".equals(screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) {
+                mSelX2++;
+            }
+        }
 
         startTextSelectionMode();
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -1265,6 +1276,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private int getPointX(int cx) {
+        if (cx > mColumns) {
+            cx = mColumns;
+        }
         return Math.round(cx * mCharacterWidth);
     }
 
@@ -1774,6 +1788,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private int mLastParentX;
         private int mLastParentY;
 
+        int mHandleWidth;
+        private final int mOrigOrient;
+        private int mOrientation;
+
 
         public static final int LEFT = 0;
         public static final int RIGHT = 2;
@@ -1791,11 +1809,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mContainer.setWidth(ViewGroup.LayoutParams.WRAP_CONTENT);
             mContainer.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
 
+            this.mOrigOrient = orientation;
             setOrientation(orientation);
         }
 
         public void setOrientation(int orientation) {
-            int handleWidth;
+            mOrientation = orientation;
+            int handleWidth = 0;
             switch (orientation) {
                 case LEFT: {
                     if (mSelectHandleLeft == null) {
@@ -1836,9 +1856,16 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             final int handleHeight = mDrawable.getIntrinsicHeight();
 
+            mHandleWidth = handleWidth;
             mTouchOffsetY = -handleHeight * 0.3f;
             mHotspotY = 0;
             invalidate();
+        }
+
+        public void changeOrientation(int orientation) {
+            if (mOrientation != orientation) {
+                setOrientation(orientation);
+            }
         }
 
         @Override
@@ -1867,6 +1894,42 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         public boolean isShowing() {
             return mContainer.isShowing();
+        }
+
+        private void checkChangedOrientation() {
+
+            final EmulatorView hostView = EmulatorView.this;
+            final int left = hostView.getLeft();
+            final int right = hostView.getWidth();
+            final int top = hostView.getTop();
+            final int bottom = hostView.getHeight();
+
+            if (mTempRect == null) {
+                mTempRect = new Rect();
+            }
+            final Rect clip = mTempRect;
+            clip.left = left + EmulatorView.this.getPaddingLeft();
+            clip.top = top + EmulatorView.this.getPaddingTop();
+            clip.right = right - EmulatorView.this.getPaddingRight();
+            clip.bottom = bottom - EmulatorView.this.getPaddingBottom();
+
+            final ViewParent parent = hostView.getParent();
+            if (parent == null || !parent.getChildVisibleRect(hostView, clip, null)) {
+                return;
+            }
+
+            final int[] coords = mTempCoords;
+            hostView.getLocationInWindow(coords);
+            final int posX = coords[0] + mPointX;
+            if (DEBUG)
+                Log.d(TAG, "checkChangedOrientation: " + posX + "  " + clip.left + "  " + clip.right);
+            if (posX + (int) mHotspotX < clip.left) {
+                changeOrientation(RIGHT);
+            } else if (posX + mHandleWidth > clip.right) {
+                changeOrientation(LEFT);
+            } else {
+                changeOrientation(mOrigOrient);
+            }
         }
 
         private boolean isPositionVisible() {
@@ -1900,8 +1963,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             final int posX = coords[0] + mPointX + (int) mHotspotX;
             final int posY = coords[1] + mPointY + (int) mHotspotY;
 
-//            System.out.println("cursor x=" + posX + "   y=" + posY + "   hostclip x=" + clip.left + "   y=" + clip.bottom);
-
             return posX >= clip.left && posX <= clip.right &&
                     posY >= clip.top && posY <= clip.bottom;
         }
@@ -1909,6 +1970,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private void moveTo(int x, int y) {
             mPointX = x;
             mPointY = y;
+            checkChangedOrientation();
             if (isPositionVisible()) {
                 int[] coords = null;
                 if (mContainer.isShowing()) {
@@ -2098,14 +2160,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 } else if (mSelY1 > mRows - 1) {
                     mSelY1 = mRows - 1;
                 }
-                if (DEBUG) Log.d(TAG, "updatePosition: left " + mSelX1 + "   " + mSelY1);
 
                 if (mSelY1 > mSelY2) {
-                    mSelY2 = mSelY1;
+                    mSelY1 = mSelY2;
                 }
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
-                    mSelX2 = mSelX1;
+                    mSelX1 = mSelX2;
                 }
+                if (DEBUG) Log.d(TAG, "updatePosition: left " + mSelX1 + "   " + mSelY1);
             } else {
                 mSelX2 = getCursorX(x);
                 mSelY2 = getCursorY(y, false);
@@ -2119,10 +2181,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 }
 
                 if (mSelY1 > mSelY2) {
-                    mSelY1 = mSelY2;
+                    mSelY2 = mSelY1;
                 }
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
-                    mSelX1 = mSelX2;
+                    mSelX2 = mSelX1;
                 }
             }
 
@@ -2137,8 +2199,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mStartHandle.positionAtCursor(mSelX1, mSelY1);
 
             mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2);
-//            }
-            invalidateActionMode();
+
+            if (mTextActionMode != null) {
+                mTextActionMode.invalidate();
+            }
 
         }
 
@@ -2211,8 +2275,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         if (mSelectionModifierCursorController != null) {
             getViewTreeObserver().removeOnTouchModeChangeListener(mSelectionModifierCursorController);
-        }
-        if (mSelectionModifierCursorController != null) {
             mSelectionModifierCursorController.onDetached();
         }
     }
@@ -2241,12 +2303,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (mTextActionMode != null) {
             // This will hide the mSelectionModifierCursorController
             mTextActionMode.finish();
-        }
-    }
-
-    private void invalidateActionMode() {
-        if (mTextActionMode != null) {
-            mTextActionMode.invalidate();
         }
     }
 
