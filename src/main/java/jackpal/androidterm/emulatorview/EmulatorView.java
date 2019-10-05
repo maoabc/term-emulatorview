@@ -1162,19 +1162,36 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         mSelX1 = mSelX2 = getCursorX(ev.getX());
         mSelY1 = mSelY2 = getCursorY(ev.getY(), ev.isFromSource(InputDevice.SOURCE_MOUSE));
-        TranscriptScreen screen = mEmulator.getScreen();
+        final TranscriptScreen screen = mEmulator.getScreen();
         if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1))) {
             // Selecting something other than whitespace. Expand to word.
-            while (mSelX1 > 0 && !"".equals(screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) {
+            String text;
+            while (mSelX1 > 0 && !"".equals((text = screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) && !wordSplit(text)) {
                 mSelX1--;
             }
-            while (mSelX2 < mColumns - 1 && !"".equals(screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) {
+            while (mSelX2 < mColumns - 1 && !"".equals((text = screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) && !wordSplit(text)) {
                 mSelX2++;
             }
         }
 
         startTextSelectionMode();
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+    }
+
+    private boolean wordSplit(String s) {
+        if (s.length() != 1) {
+            return false;
+        }
+        switch (s.charAt(0)) {
+            case '/':
+            case '.':
+            case ' ':
+            case '&':
+            case ',':
+            case ':':
+                return true;
+        }
+        return false;
     }
 
     public boolean onScroll(MotionEvent e1, MotionEvent e2,
@@ -1788,9 +1805,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private int mLastParentX;
         private int mLastParentY;
 
-        int mHandleWidth;
         private final int mOrigOrient;
         private int mOrientation;
+
+        private int mHandleWidth;
+        private int mHandleHeight;
 
 
         public static final int LEFT = 0;
@@ -1854,10 +1873,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             }
 
-            final int handleHeight = mDrawable.getIntrinsicHeight();
+            mHandleHeight = mDrawable.getIntrinsicHeight();
 
             mHandleWidth = handleWidth;
-            mTouchOffsetY = -handleHeight * 0.3f;
+            mTouchOffsetY = -mHandleHeight * 0.3f;
             mHotspotY = 0;
             invalidate();
         }
@@ -1921,8 +1940,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             final int[] coords = mTempCoords;
             hostView.getLocationInWindow(coords);
             final int posX = coords[0] + mPointX;
-            if (DEBUG)
-                Log.d(TAG, "checkChangedOrientation: " + posX + "  " + clip.left + "  " + clip.right);
+
             if (posX + (int) mHotspotX < clip.left) {
                 changeOrientation(RIGHT);
             } else if (posX + mHandleWidth > clip.right) {
@@ -2005,9 +2023,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         @Override
         public void onDraw(Canvas c) {
-            final int drawWidth = mDrawable.getIntrinsicWidth();
-            int height = mDrawable.getIntrinsicHeight();
-            mDrawable.setBounds(0, 0, drawWidth, height);
+            mDrawable.setBounds(0, 0, mHandleWidth, mHandleHeight);
             mDrawable.draw(c);
 
         }
@@ -2067,10 +2083,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private HandleView mStartHandle, mEndHandle;
         // Whether selection anchors are active
         private boolean mIsShowing;
+        private final int mHandleHeight;
 
         SelectionModifierCursorController() {
             mStartHandle = new HandleView(this, HandleView.LEFT);
             mEndHandle = new HandleView(this, HandleView.RIGHT);
+            mHandleHeight = Math.max(mStartHandle.mHandleHeight, mEndHandle.mHandleHeight);
         }
 
         public void show() {
@@ -2104,16 +2122,15 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     @Override
                     public void onGetContentRect(ActionMode mode, View view, Rect outRect) {
                         int x1 = getPointX(mSelX1);
-                        int x2 = getPointX(mSelX2 + 1);
+                        int x2 = getPointX(mSelX2);
                         int y1 = getPointY(mSelY1);
                         int y2 = getPointY(mSelY2 + 1);
-                        int height = mStartHandle.getHeight();
                         if (x1 > x2) {
                             int tmp = x1;
                             x1 = x2;
                             x2 = tmp;
                         }
-                        outRect.set(x1, y1 + height, x2, y2 + height);
+                        outRect.set(x1, y1 + mHandleHeight, x2, y2 + mHandleHeight);
                     }
                 }, ActionMode.TYPE_FLOATING);
             } else {
@@ -2136,8 +2153,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         public void updatePosition(HandleView handle, int x, int y) {
             if (DEBUG)
                 Log.d(TAG, "updatePosition: " + x + "  " + y + "   " + mTopRow + "   "
-                        + mEmulator.getScreen().getActiveRows() + "   " + EmulatorView.this.getHeight());
-            final int scrollRows = getScrollRows();
+                        + mCharacterHeight + "   " + EmulatorView.this.getHeight());
+            final int scrollRows = mEmulator.getScreen().getActiveRows() - mRows;
             if (y < mCharacterHeight) {//向上滚动
                 mTopRow--;
                 if (mTopRow < -scrollRows) {
@@ -2232,10 +2249,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         @Override
         public void onDetached() {
         }
-    }
-
-    private int getScrollRows() {
-        return mEmulator.getScreen().getActiveRows() - mRows;
     }
 
 
