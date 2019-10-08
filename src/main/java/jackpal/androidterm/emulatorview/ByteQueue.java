@@ -22,7 +22,7 @@ package jackpal.androidterm.emulatorview;
  */
 
 class ByteQueue {
-    public ByteQueue(int size) {
+    ByteQueue(int size) {
         mBuffer = new byte[size];
     }
 

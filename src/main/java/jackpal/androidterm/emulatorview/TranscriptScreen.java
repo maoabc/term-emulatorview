@@ -26,7 +26,7 @@ import java.util.Arrays;
  * needs to be done. The transcript does its own drawing, to avoid having to
  * expose its internal data structures.
  */
-class TranscriptScreen implements Screen {
+class TranscriptScreen {
     /**
      * The width of the transcript, in characters. Fixed at initialization.
      */
@@ -162,7 +162,7 @@ class TranscriptScreen implements Screen {
      * @param cursorMode the cursor mode. See TextRenderer.
      */
     public final void drawText(int row, Canvas canvas, float x, float y,
-                               TextRenderer renderer, int cx, int selx1, int selx2, String imeText, int cursorMode) {
+                               BaseTextRenderer renderer, int cx, int selx1, int selx2, String imeText, int cursorMode) {
         char[] line;
         StyleRow color;
         int cursorWidth = 1;

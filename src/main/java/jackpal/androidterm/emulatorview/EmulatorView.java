@@ -129,7 +129,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     /**
      * Used to render text
      */
-    private TextRenderer mTextRenderer;
+    private BaseTextRenderer mTextRenderer;
 
     /**
      * Text size. Zero means 4 x 8 font.
