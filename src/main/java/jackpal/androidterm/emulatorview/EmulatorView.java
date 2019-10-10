@@ -27,6 +27,7 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.style.URLSpan;
@@ -1563,15 +1564,15 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return;
         }
 
-//        int w = getWidth() - getPaddingRight() - getPaddingLeft();
-//        int h = getHeight() - getPaddingTop() - getPaddingBottom();
+        int w = getWidth() - getPaddingRight() - getPaddingLeft();
+        int h = getHeight() - getPaddingTop() - getPaddingBottom();
 
         boolean reverseVideo = mEmulator.getReverseVideo();
         mTextRenderer.setReverseVideo(reverseVideo);
 
-//        Paint backgroundPaint =
-//                reverseVideo ? mForegroundPaint : mBackgroundPaint;
-//        canvas.drawRect(0, 0, w, h, backgroundPaint);
+        Paint backgroundPaint =
+                reverseVideo ? mForegroundPaint : mBackgroundPaint;
+        canvas.drawRect(0, 0, w, h, backgroundPaint);
 
         float x = -mLeftColumn * mCharacterWidth;
         float y = mCharacterHeight + mTopOfScreenMargin;
@@ -1811,6 +1812,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private int mHandleWidth;
         private int mHandleHeight;
 
+        private long mLastTime;
+
 
         public static final int LEFT = 0;
         public static final int RIGHT = 2;
@@ -1916,6 +1919,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         private void checkChangedOrientation() {
+            //防止handleView抖动
+            long millis = SystemClock.currentThreadTimeMillis();
+            if (millis - mLastTime < 50) {
+                return;
+            }
+            mLastTime = millis;
 
             final EmulatorView hostView = EmulatorView.this;
             final int left = hostView.getLeft();
@@ -1941,7 +1950,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             hostView.getLocationInWindow(coords);
             final int posX = coords[0] + mPointX;
 
-            if (posX + (int) mHotspotX < clip.left) {
+            if (posX < clip.left) {
                 changeOrientation(RIGHT);
             } else if (posX + mHandleWidth > clip.right) {
                 changeOrientation(LEFT);
