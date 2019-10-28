@@ -977,8 +977,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollRange() {
-        if (mEmulator == null) return 0;
-        return mEmulator.getScreen().getActiveRows();
+        return 0;
     }
 
     /**
@@ -998,8 +997,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollOffset() {
-        if (mEmulator == null) return 0;
-        return mEmulator.getScreen().getActiveRows() + mTopRow - mRows;
+        return 0;
     }
 
     /**
