@@ -404,9 +404,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                         char c = textToLinkify.charAt(i);
                         if (Character.isHighSurrogate(c)) {
                             ++i;
-                            startCol += UnicodeTranscript.charWidth(c, textToLinkify.charAt(i));
+                            startCol += WcWidth.wcwidth(c, textToLinkify.charAt(i));
                         } else {
-                            startCol += UnicodeTranscript.charWidth(c);
+                            startCol += WcWidth.wcwidth(c);
                         }
                         if (startCol >= columns) {
                             ++startRow;
@@ -420,9 +420,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                         char c = textToLinkify.charAt(i);
                         if (Character.isHighSurrogate(c)) {
                             ++i;
-                            endCol += UnicodeTranscript.charWidth(c, textToLinkify.charAt(i));
+                            endCol += WcWidth.wcwidth(c, textToLinkify.charAt(i));
                         } else {
-                            endCol += UnicodeTranscript.charWidth(c);
+                            endCol += WcWidth.wcwidth(c);
                         }
                         if (endCol >= columns) {
                             ++endRow;

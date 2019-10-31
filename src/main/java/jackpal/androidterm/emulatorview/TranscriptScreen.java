@@ -219,10 +219,10 @@ class TranscriptScreen {
             int incr = 1;
             int width;
             if (Character.isHighSurrogate(line[index])) {
-                width = UnicodeTranscript.charWidth(line, index);
+                width = WcWidth.wcwidth(line, index);
                 incr++;
             } else {
-                width = UnicodeTranscript.charWidth(line[index]);
+                width = WcWidth.wcwidth(line[index]);
             }
             if (width > 0) {
                 // We've moved on to the next column
@@ -390,7 +390,7 @@ class TranscriptScreen {
                     lastPrintingChar = i;
                 }
                 if (!Character.isLowSurrogate(c)) {
-                    column += UnicodeTranscript.charWidth(line, i);
+                    column += WcWidth.wcwidth(line, i);
                 }
             }
             if (data.getLineWrap(row) && lastPrintingChar > -1 && x2 == columns) {
@@ -403,7 +403,7 @@ class TranscriptScreen {
                     column = 0;
                     for (int j = 0; j <= lastPrintingChar; ++j) {
                         colors.append(rowColorBuffer.get(column));
-                        column += UnicodeTranscript.charWidth(line, j);
+                        column += WcWidth.wcwidth(line, j);
                         if (Character.isHighSurrogate(line[j])) {
                             ++j;
                         }

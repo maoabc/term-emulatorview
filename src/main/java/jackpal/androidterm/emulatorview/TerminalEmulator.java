@@ -1834,7 +1834,7 @@ class TerminalEmulator {
      */
     private void emit(int c, int style) {
         boolean autoWrap = autoWrapEnabled();
-        int width = UnicodeTranscript.charWidth(c);
+        int width = WcWidth.wcwidth(c);
 
         if (autoWrap) {
             if (mCursorCol == mColumns - 1 && (mAboutToAutoWrap || width == 2)) {

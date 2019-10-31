@@ -18,9 +18,6 @@ package jackpal.androidterm.emulatorview;
 
 import android.util.Log;
 
-import jackpal.androidterm.emulatorview.compat.AndroidCharacterCompat;
-import jackpal.androidterm.emulatorview.compat.AndroidCompat;
-
 /**
  * A backing store for a TranscriptScreen.
  *
@@ -59,7 +56,7 @@ class UnicodeTranscript {
     private char[] tmpLine;
     private StyleRow tmpColor;
 
-    public UnicodeTranscript(int columns, int totalRows, int screenRows, int defaultStyle) {
+    UnicodeTranscript(int columns, int totalRows, int screenRows, int defaultStyle) {
         mColumns = columns;
         mTotalRows = totalRows;
         mScreenRows = screenRows;
@@ -406,10 +403,10 @@ class UnicodeTranscript {
                         } else if (Character.isLowSurrogate(tmp[i])) {
                             int codePoint = Character.toCodePoint(cHigh, tmp[i]);
                             setChar(dx + x, extDstRow, codePoint);
-                            x += charWidth(codePoint);
+                            x += WcWidth.wcwidth(codePoint);
                         } else {
                             setChar(dx + x, extDstRow, tmp[i]);
-                            x += charWidth(tmp[i]);
+                            x += WcWidth.wcwidth(tmp[i]);
                         }
                     }
                 }
@@ -444,10 +441,10 @@ class UnicodeTranscript {
                         } else if (Character.isLowSurrogate(tmp[i])) {
                             int codePoint = Character.toCodePoint(cHigh, tmp[i]);
                             setChar(dx + x, extDstRow, codePoint);
-                            x += charWidth(codePoint);
+                            x += WcWidth.wcwidth(codePoint);
                         } else {
                             setChar(dx + x, extDstRow, tmp[i]);
-                            x += charWidth(tmp[i]);
+                            x += WcWidth.wcwidth(tmp[i]);
                         }
                     }
                 }
@@ -481,115 +478,6 @@ class UnicodeTranscript {
         }
     }
 
-    /**
-     * Minimum API version for which we're willing to let Android try
-     * rendering conjoining Hangul jamo as composed syllable blocks.
-     *
-     * This appears to work on Android 4.1.2, 4.3, and 4.4 (real devices only;
-     * the emulator's broken for some reason), but not on 4.0.4 -- hence the
-     * choice of API 16 as the minimum.
-     */
-    static final int HANGUL_CONJOINING_MIN_SDK = 16;
-
-    /**
-     * Gives the display width of the code point in a monospace font.
-     *
-     * Nonspacing combining marks, format characters, and control characters
-     * have display width zero.  East Asian fullwidth and wide characters
-     * have display width two.  All other characters have display width one.
-     *
-     * Known issues:
-     * - Proper support for East Asian wide characters requires API >= 8.
-     * - Assigning all East Asian "ambiguous" characters a width of 1 may not
-     *   be correct if Android renders those characters as wide in East Asian
-     *   context (as the Unicode standard permits).
-     * - Isolated Hangul conjoining medial vowels and final consonants are
-     *   treated as combining characters (they should only be combining when
-     *   part of a Korean syllable block).
-     *
-     * @param codePoint A Unicode code point.
-     * @return The display width of the Unicode code point.
-     */
-    public static int charWidth(int codePoint) {
-        // Early out for ASCII printable characters
-        if (codePoint > 31 && codePoint < 127) {
-            return 1;
-        }
-
-        /* HACK: We're using ASCII ESC to save the location of the cursor
-           across screen resizes, so we need to pretend that it has width 1 */
-        if (codePoint == 27) {
-            return 1;
-        }
-
-        switch (Character.getType(codePoint)) {
-        case Character.CONTROL:
-        case Character.FORMAT:
-        case Character.NON_SPACING_MARK:
-        case Character.ENCLOSING_MARK:
-            return 0;
-        }
-
-        if ((codePoint >= 0x1160 && codePoint <= 0x11FF) ||
-            (codePoint >= 0xD7B0 && codePoint <= 0xD7FF)) {
-            if (AndroidCompat.SDK >= HANGUL_CONJOINING_MIN_SDK) {
-                /* Treat Hangul jamo medial vowels and final consonants as
-                 * combining characters with width 0 to make jamo composition
-                 * work correctly.
-                 *
-                 * XXX: This is wrong for medials/finals outside a Korean
-                 * syllable block, but there's no easy solution to that
-                 * problem, and we may as well at least get the common case
-                 * right. */
-                return 0;
-            } else {
-                /* Older versions of Android didn't compose Hangul jamo, but
-                 * instead rendered them as individual East Asian wide
-                 * characters (despite Unicode defining medial vowels and final
-                 * consonants as East Asian neutral/narrow).  Treat them as
-                 * width 2 characters to match the rendering. */
-                return 2;
-            }
-        }
-        if (Character.charCount(codePoint) == 1) {
-            // Android's getEastAsianWidth() only works for BMP characters
-            switch (AndroidCharacterCompat.getEastAsianWidth((char) codePoint)) {
-            case AndroidCharacterCompat.EAST_ASIAN_WIDTH_FULL_WIDTH:
-            case AndroidCharacterCompat.EAST_ASIAN_WIDTH_WIDE:
-                return 2;
-            }
-        } else {
-            // Outside the BMP, only the ideographic planes contain wide chars
-            switch ((codePoint >> 16) & 0xf) {
-            case 2: // Supplementary Ideographic Plane
-            case 3: // Tertiary Ideographic Plane
-                return 2;
-            }
-        }
-
-        return 1;
-    }
-
-    public static int charWidth(char cHigh, char cLow) {
-        return charWidth(Character.toCodePoint(cHigh, cLow));
-    }
-
-    /**
-     * Gives the display width of a code point in a char array
-     * in a monospace font.
-     *
-     * @param chars The array containing the code point in question.
-     * @param index The index into the array at which the code point starts.
-     * @return The display width of the Unicode code point.
-     */
-    public static int charWidth(char[] chars, int index) {
-        char c = chars[index];
-        if (Character.isHighSurrogate(c)) {
-            return charWidth(c, chars[index+1]);
-        } else {
-            return charWidth(c);
-        }
-    }
 
     /**
      * Get the contents of a line (or part of a line) of the transcript.
@@ -772,7 +660,7 @@ class UnicodeTranscript {
     }
 
     private boolean isBasicChar(int codePoint) {
-        return !(charWidth(codePoint) != 1 || Character.charCount(codePoint) != 1);
+        return !(WcWidth.wcwidth(codePoint) != 1 || Character.charCount(codePoint) != 1);
     }
 
     private char[] allocateBasicLine(int row, int columns) {
@@ -949,8 +837,8 @@ class FullUnicodeLine {
 
         int pos = findStartOfColumn(column);
 
-        int charWidth = UnicodeTranscript.charWidth(codePoint);
-        int oldCharWidth = UnicodeTranscript.charWidth(text, pos);
+        int charWidth = WcWidth.wcwidth(codePoint);
+        int oldCharWidth = WcWidth.wcwidth(text, pos);
 
         if (charWidth == 2 && column == columns - 1) {
             // A width 2 character doesn't fit in the last column.
@@ -1095,7 +983,7 @@ class FullUnicodeLine {
             } else {
                 // Overwrite the contents of the next column.
                 int nextPos = pos + newLen;
-                int nextWidth = UnicodeTranscript.charWidth(text, nextPos);
+                int nextWidth = WcWidth.wcwidth(text, nextPos);
                 int nextLen;
                 if (column + nextWidth + 1 < columns) {
                     nextLen = findStartOfColumn(column + nextWidth + 1) + shift - nextPos;
