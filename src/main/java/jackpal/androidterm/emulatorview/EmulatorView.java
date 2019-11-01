@@ -1147,16 +1147,17 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
     public void onLongPress(MotionEvent ev) {
 
-        mSelX1 = mSelX2 = getCursorX(ev.getX());
+        mSelX1 = getCursorX(ev.getX());
+        mSelX2 = mSelX1 + 1;
         mSelY1 = mSelY2 = getCursorY(ev.getY(), ev.isFromSource(InputDevice.SOURCE_MOUSE));
         final TranscriptScreen screen = mEmulator.getScreen();
-        if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1))) {
+        if (!" ".equals(screen.getSelectedText(mSelX1, mSelY1, mSelX2, mSelY1))) {
             // Selecting something other than whitespace. Expand to word.
             String text;
-            while (mSelX1 > 0 && !"".equals((text = screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1))) && !wordSplit(text)) {
+            while (mSelX1 > 0 && !"".equals((text = screen.getSelectedText(mSelX1 - 1, mSelY1, mSelX1, mSelY1))) && !wordSplit(text)) {
                 mSelX1--;
             }
-            while (mSelX2 < mColumns - 1 && !"".equals((text = screen.getSelectedText(mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1))) && !wordSplit(text)) {
+            while (mSelX2 < mColumns - 1 && !"".equals((text = screen.getSelectedText(mSelX2, mSelY1, mSelX2 + 1, mSelY1))) && !wordSplit(text)) {
                 mSelX2++;
             }
         }
@@ -1272,11 +1273,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private int getCursorX(float x) {
-        return (int) (x / mTextRenderer.getCharacterWidth());
+        return (int) Math.ceil(x / mTextRenderer.getCharacterWidth());
     }
 
     private int getCursorY(float y, boolean isMouse) {
-        return (int) (((y + (isMouse ? 0 : SELECT_TEXT_OFFSET_Y)) / mTextRenderer.getCharacterHeight()) + mTopRow);
+        return (int) Math.ceil(((y + (isMouse ? 0 : SELECT_TEXT_OFFSET_Y)) / mTextRenderer.getCharacterHeight()) + mTopRow);
     }
 
     private int getPointX(int cx) {
@@ -1558,8 +1559,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 reverseVideo ? mForegroundPaint : mBackgroundPaint;
         canvas.drawRect(0, 0, w, h, backgroundPaint);
 
+        final int characterHeight = mTextRenderer.getCharacterHeight();
+
         float x = -mLeftColumn * mTextRenderer.getCharacterWidth();
-        float y = mTextRenderer.getCharacterHeight() + mTopOfScreenMargin;
+        float y = characterHeight + mTopOfScreenMargin;
         int endLine = mTopRow + mRows;
         int cx = mEmulator.getCursorCol();
         int cy = mEmulator.getCursorRow();
@@ -1587,13 +1590,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     selx1 = mSelX1;
                 }
                 if (i == selY2) {
-                    selx2 = mSelX2;
+                    selx2 = mSelX2 - 1;
                 } else {
-                    selx2 = mColumns;
+                    selx2 = mColumns - 1;
                 }
             }
             mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
-            y += mTextRenderer.getCharacterHeight();
+            y += characterHeight;
             //if no lines to skip, create links for the line being drawn
             if (linkLinesToSkip == 0)
                 linkLinesToSkip = createLinks(i);
@@ -1981,7 +1984,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private void moveTo(int x, int y) {
             mPointX = x;
             mPointY = y;
-            checkChangedOrientation();
+//            checkChangedOrientation();
             if (isPositionVisible()) {
                 int[] coords = null;
                 if (mContainer.isShowing()) {
@@ -2144,21 +2147,23 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         public void updatePosition(HandleView handle, int x, int y) {
+            final int characterHeight = mTextRenderer.getCharacterHeight();
             if (DEBUG)
                 Log.d(TAG, "updatePosition: " + x + "  " + y + "   " + mTopRow + "   "
-                        + mTextRenderer.getCharacterHeight() + "   " + EmulatorView.this.getHeight());
+                        + characterHeight + "   " + EmulatorView.this.getHeight());
             final int scrollRows = mEmulator.getScreen().getActiveRows() - mRows;
-            if (y < mTextRenderer.getCharacterHeight()) {//向上滚动
+            if (y < characterHeight) {//向上滚动
                 mTopRow--;
                 if (mTopRow < -scrollRows) {
                     mTopRow = -scrollRows;
                 }
-            } else if (y + 2 * mTextRenderer.getCharacterHeight() > EmulatorView.this.getHeight()) {//向下滚动
+            } else if (y + 2 * characterHeight > EmulatorView.this.getHeight()) {//向下滚动
                 mTopRow++;
                 if (mTopRow > 0) {
                     mTopRow = 0;
                 }
             }
+            TranscriptScreen screen = mEmulator.getScreen();
             if (handle == mStartHandle) {
                 mSelX1 = getCursorX(x);
                 mSelY1 = getCursorY(y, false);
@@ -2177,7 +2182,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
                     mSelX1 = mSelX2;
                 }
-                if (DEBUG) Log.d(TAG, "updatePosition: left " + mSelX1 + "   " + mSelY1);
+                mSelX1 = getValidCurX(screen, mSelY1, mSelX1);
+
+                if (DEBUG)
+                    Log.d(TAG, "updatePosition: left " + mSelX1 + "   " + mSelY1);
             } else {
                 mSelX2 = getCursorX(x);
                 mSelY2 = getCursorY(y, false);
@@ -2196,9 +2204,42 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
                     mSelX2 = mSelX1;
                 }
+                mSelX2 = getValidCurX(screen, mSelY2, mSelX2);
             }
+            if (DEBUG)
+                Log.d(TAG, "updatePosition: selx1= " + mSelX1 + "  selx2 = " + mSelX2);
 
             invalidate();
+        }
+
+        //得到有效的字符间隙
+        private int getValidCurX(TranscriptScreen screen, int cy, int cx) {
+            char[] line = screen.getScriptLine(cy);
+            if (line != null) {
+                int col = 0;
+                for (int i = 0, len = line.length; i < len; i++) {
+                    char ch1 = line[i];
+                    if (ch1 == 0) {
+                        break;
+                    }
+
+
+                    int wc;
+                    if (Character.isHighSurrogate(ch1) && i + 1 < len) {
+                        char ch2 = line[++i];
+                        wc = WcWidth.wcwidth(ch1, ch2);
+                    } else {
+                        wc = WcWidth.wcwidth(ch1);
+                    }
+
+                    final int cend = col + wc;
+                    if (cx > col && cx < cend) {
+                        return cend;
+                    }
+                    col = cend;
+                }
+            }
+            return cx;
         }
 
         public void updatePosition() {
@@ -2208,7 +2249,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             mStartHandle.positionAtCursor(mSelX1, mSelY1);
 
-            mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2);
+            mEndHandle.positionAtCursor(mSelX2, mSelY2);
 
             if (mTextActionMode != null) {
                 mTextActionMode.invalidate();

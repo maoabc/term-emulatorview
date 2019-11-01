@@ -170,8 +170,7 @@ public class TermSession {
                                     mMsgHandler.obtainMessage(NEW_INPUT));
                         }
                     }
-                } catch (IOException e) {
-                } catch (InterruptedException e) {
+                } catch (IOException | InterruptedException ignored) {
                 }
 
                 if (exitOnEOF) mMsgHandler.sendMessage(mMsgHandler.obtainMessage(EOF));
@@ -222,12 +221,10 @@ public class TermSession {
                     bytesToWrite = writeQueue.read(buffer, 0, bytesToWrite);
                     termOut.write(buffer, 0, bytesToWrite);
                     termOut.flush();
-                } catch (IOException e) {
+                } catch (IOException | InterruptedException e) {
                     // Ignore exception
                     // We don't really care if the receiver isn't listening.
                     // We just make a best effort to answer the query.
-                    e.printStackTrace();
-                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }

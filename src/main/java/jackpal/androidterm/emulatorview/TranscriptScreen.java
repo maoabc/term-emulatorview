@@ -17,6 +17,7 @@
 package jackpal.androidterm.emulatorview;
 
 import android.graphics.Canvas;
+import android.text.TextUtils;
 
 import java.util.Arrays;
 
@@ -282,7 +283,7 @@ class TranscriptScreen {
                     cx, cursorIndex, cursorIncr, cursorWidth, cursorMode);
         }
 
-        if (cx >= 0 && imeText.length() > 0) {
+        if (cx >= 0 && !TextUtils.isEmpty(imeText)) {
             int imeLength = Math.min(columns, imeText.length());
             int imeOffset = imeText.length() - imeLength;
             int imePosition = Math.min(cx, columns - imeLength);
@@ -311,11 +312,11 @@ class TranscriptScreen {
     }
 
     public String getTranscriptText() {
-        return internalGetTranscriptText(null, 0, -mData.getActiveTranscriptRows(), mColumns, mScreenRows);
+        return internalGetTranscriptText(null, 0, -mData.getActiveTranscriptRows(), mColumns + 1, mScreenRows);
     }
 
     public String getTranscriptText(GrowableIntArray colors) {
-        return internalGetTranscriptText(colors, 0, -mData.getActiveTranscriptRows(), mColumns, mScreenRows);
+        return internalGetTranscriptText(colors, 0, -mData.getActiveTranscriptRows(), mColumns + 1, mScreenRows);
     }
 
     public String getSelectedText(int selX1, int selY1, int selX2, int selY2) {
@@ -345,7 +346,7 @@ class TranscriptScreen {
                 x1 = selX1;
             }
             if (row == selY2) {
-                x2 = selX2 + 1;
+                x2 = selX2;
                 if (x2 > columns) {
                     x2 = columns;
                 }

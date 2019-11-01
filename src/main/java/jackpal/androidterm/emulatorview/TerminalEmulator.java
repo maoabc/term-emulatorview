@@ -495,7 +495,7 @@ class TerminalEmulator {
              * This is an epic hack that lets us restore the cursor later...
              */
             cursorColor = new GrowableIntArray(1);
-            charAtCursor = screen.getSelectedText(cursorColor, mCursorCol, mCursorRow, mCursorCol, mCursorRow);
+            charAtCursor = screen.getSelectedText(cursorColor, mCursorCol, mCursorRow, mCursorCol + 1, mCursorRow);
             screen.set(mCursorCol, mCursorRow, 27, 0);
 
             colors = new GrowableIntArray(1024);
