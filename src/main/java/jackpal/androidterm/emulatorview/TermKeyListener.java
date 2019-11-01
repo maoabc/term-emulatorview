@@ -336,13 +336,13 @@ class TermKeyListener {
             switch (mState) {
                 default:
                 case UNPRESSED:
-                    return BaseTextRenderer.MODE_OFF;
+                    return PaintRenderer.MODE_OFF;
                 case PRESSED:
                 case RELEASED:
                 case USED:
-                    return BaseTextRenderer.MODE_ON;
+                    return PaintRenderer.MODE_ON;
                 case LOCKED:
-                    return BaseTextRenderer.MODE_LOCKED;
+                    return PaintRenderer.MODE_LOCKED;
             }
         }
     }
@@ -690,10 +690,10 @@ class TermKeyListener {
     }
 
     private void updateCursorMode() {
-        mCursorMode = getCursorModeHelper(mCapKey, BaseTextRenderer.MODE_SHIFT_SHIFT)
-                | getCursorModeHelper(mAltKey, BaseTextRenderer.MODE_ALT_SHIFT)
-                | getCursorModeHelper(mControlKey, BaseTextRenderer.MODE_CTRL_SHIFT)
-                | getCursorModeHelper(mFnKey, BaseTextRenderer.MODE_FN_SHIFT);
+        mCursorMode = getCursorModeHelper(mCapKey, PaintRenderer.MODE_SHIFT_SHIFT)
+                | getCursorModeHelper(mAltKey, PaintRenderer.MODE_ALT_SHIFT)
+                | getCursorModeHelper(mControlKey, PaintRenderer.MODE_CTRL_SHIFT)
+                | getCursorModeHelper(mFnKey, PaintRenderer.MODE_FN_SHIFT);
     }
 
     private static int getCursorModeHelper(ModifierKey key, int shift) {

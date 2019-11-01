@@ -162,21 +162,21 @@ class TranscriptScreen {
      * @param cursorMode the cursor mode. See TextRenderer.
      */
     public final void drawText(int row, Canvas canvas, float x, float y,
-                               BaseTextRenderer renderer, int cx, int selx1, int selx2, String imeText, int cursorMode) {
+                               PaintRenderer renderer, int cx, int selx1, int selx2, String imeText, int cursorMode) {
         char[] line;
         StyleRow color;
         int cursorWidth = 1;
-        try {
-            line = mData.getLine(row);
-            color = mData.getLineColor(row);
-        } catch (IllegalArgumentException e) {
-            // Out-of-bounds rows are blank.
-            return;
-        } catch (NullPointerException e) {
-            // Attempt to draw on a finished transcript
-            // XXX Figure out why this happens on Honeycomb
-            return;
-        }
+//        try {
+        line = mData.getLine(row);
+        color = mData.getLineColor(row);
+//        } catch (IllegalArgumentException e) {
+        // Out-of-bounds rows are blank.
+//            return;
+//        } catch (NullPointerException e) {
+        // Attempt to draw on a finished transcript
+        // XXX Figure out why this happens on Honeycomb
+//            return;
+//        }
         int defaultStyle = mData.getDefaultStyle();
 
         if (line == null) {
@@ -457,13 +457,7 @@ class TranscriptScreen {
      * @return The line of text at this row index
      */
     char[] getScriptLine(int row) {
-        try {
-            return mData.getLine(row);
-        } catch (IllegalArgumentException e) {
-            return null;
-        } catch (NullPointerException e) {
-            return null;
-        }
+        return mData.getLine(row);
     }
 
     /**

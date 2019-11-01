@@ -113,16 +113,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     private TermSession mTermSession;
 
     /**
-     * Total width of each character, in pixels
-     */
-    private float mCharacterWidth;
-
-    /**
-     * Total height of each character, in pixels
-     */
-    private int mCharacterHeight;
-
-    /**
      * Top-of-screen margin
      */
     private int mTopOfScreenMargin;
@@ -130,7 +120,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     /**
      * Used to render text
      */
-    private BaseTextRenderer mTextRenderer;
+    private PaintRenderer mTextRenderer;
 
     /**
      * Text size. Zero means 4 x 8 font.
@@ -142,11 +132,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     /**
      * Color scheme (default foreground/background colors).
      */
-    private ColorScheme mColorScheme = BaseTextRenderer.defaultColorScheme;
+    private ColorScheme mColorScheme = PaintRenderer.defaultColorScheme;
 
-    private Paint mForegroundPaint;
+    private final Paint mForegroundPaint = new Paint();
 
-    private Paint mBackgroundPaint;
+    private final Paint mBackgroundPaint = new Paint();
 
     private boolean mUseCookedIme;
 
@@ -566,8 +556,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public void attachSession(TermSession session) {
         mTextRenderer = null;
-        mForegroundPaint = new Paint();
-        mBackgroundPaint = new Paint();
         mTopRow = 0;
         mLeftColumn = 0;
         mGestureDetector = new GestureDetector(getContext(), this);
@@ -637,7 +625,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public void setColorScheme(ColorScheme scheme) {
         if (scheme == null) {
-            mColorScheme = BaseTextRenderer.defaultColorScheme;
+            mColorScheme = PaintRenderer.defaultColorScheme;
         } else {
             mColorScheme = scheme;
         }
@@ -1117,8 +1105,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * Send a single mouse event code to the terminal.
      */
     private void sendMouseEventCode(MotionEvent e, int button_code) {
-        int x = (int) (e.getX() / mCharacterWidth) + 1;
-        int y = (int) ((e.getY() - mTopOfScreenMargin) / mCharacterHeight) + 1;
+        int x = (int) (e.getX() / mTextRenderer.getCharacterWidth()) + 1;
+        int y = (int) ((e.getY() - mTopOfScreenMargin) / mTextRenderer.getCharacterHeight()) + 1;
         // Clip to screen, and clip to the limits of 8-bit data.
         boolean out_of_bounds =
                 x < 1 || y < 1 ||
@@ -1200,8 +1188,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         distanceY += mScrollRemainder;
-        int deltaRows = (int) (distanceY / mCharacterHeight);
-        mScrollRemainder = distanceY - deltaRows * mCharacterHeight;
+        int deltaRows = (int) (distanceY / mTextRenderer.getCharacterHeight());
+        mScrollRemainder = distanceY - deltaRows * mTextRenderer.getCharacterHeight();
 
         if (isMouseTrackingActive()) {
             // Send mouse wheel events to terminal.
@@ -1284,22 +1272,22 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private int getCursorX(float x) {
-        return (int) (x / mCharacterWidth);
+        return (int) (x / mTextRenderer.getCharacterWidth());
     }
 
     private int getCursorY(float y, boolean isMouse) {
-        return (int) (((y + (isMouse ? 0 : SELECT_TEXT_OFFSET_Y)) / mCharacterHeight) + mTopRow);
+        return (int) (((y + (isMouse ? 0 : SELECT_TEXT_OFFSET_Y)) / mTextRenderer.getCharacterHeight()) + mTopRow);
     }
 
     private int getPointX(int cx) {
         if (cx > mColumns) {
             cx = mColumns;
         }
-        return Math.round(cx * mCharacterWidth);
+        return Math.round(cx * mTextRenderer.getCharacterWidth());
     }
 
     private int getPointY(int cy) {
-        return Math.round((cy - mTopRow) * mCharacterHeight);
+        return Math.round((cy - mTopRow) * mTextRenderer.getCharacterHeight());
     }
 
 
@@ -1482,10 +1470,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         ColorScheme scheme = mColorScheme;
         mTextRenderer = new PaintRenderer(mTextSize, scheme);
 
-        if (mForegroundPaint != null) mForegroundPaint.setColor(scheme.getForeColor());
-        if (mBackgroundPaint != null) mBackgroundPaint.setColor(scheme.getBackColor());
-        mCharacterWidth = mTextRenderer.getCharacterWidth();
-        mCharacterHeight = mTextRenderer.getCharacterHeight();
+        mForegroundPaint.setColor(scheme.getForeColor());
+        mBackgroundPaint.setColor(scheme.getBackColor());
 
         updateSize(true);
     }
@@ -1512,12 +1498,12 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private void updateSize(int w, int h) {
-        mColumns = Math.max(1, (int) (((float) w) / mCharacterWidth));
-        mVisibleColumns = Math.max(1, (int) (((float) mVisibleWidth) / mCharacterWidth));
+        mColumns = Math.max(1, (int) (((float) w) / mTextRenderer.getCharacterWidth()));
+        mVisibleColumns = Math.max(1, (int) (((float) mVisibleWidth) / mTextRenderer.getCharacterWidth()));
 
         mTopOfScreenMargin = mTextRenderer.getTopMargin();
-        mRows = Math.max(1, (h - mTopOfScreenMargin) / mCharacterHeight);
-        mVisibleRows = Math.max(1, (mVisibleHeight - mTopOfScreenMargin) / mCharacterHeight);
+        mRows = Math.max(1, (h - mTopOfScreenMargin) / mTextRenderer.getCharacterHeight());
+        mVisibleRows = Math.max(1, (mVisibleHeight - mTopOfScreenMargin) / mTextRenderer.getCharacterHeight());
         mTermSession.updateSize(mColumns, mRows);
 
         // Reset our paging:
@@ -1572,8 +1558,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 reverseVideo ? mForegroundPaint : mBackgroundPaint;
         canvas.drawRect(0, 0, w, h, backgroundPaint);
 
-        float x = -mLeftColumn * mCharacterWidth;
-        float y = mCharacterHeight + mTopOfScreenMargin;
+        float x = -mLeftColumn * mTextRenderer.getCharacterWidth();
+        float y = mTextRenderer.getCharacterHeight() + mTopOfScreenMargin;
         int endLine = mTopRow + mRows;
         int cx = mEmulator.getCursorCol();
         int cy = mEmulator.getCursorRow();
@@ -1607,7 +1593,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 }
             }
             mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
-            y += mCharacterHeight;
+            y += mTextRenderer.getCharacterHeight();
             //if no lines to skip, create links for the line being drawn
             if (linkLinesToSkip == 0)
                 linkLinesToSkip = createLinks(i);
@@ -2160,14 +2146,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         public void updatePosition(HandleView handle, int x, int y) {
             if (DEBUG)
                 Log.d(TAG, "updatePosition: " + x + "  " + y + "   " + mTopRow + "   "
-                        + mCharacterHeight + "   " + EmulatorView.this.getHeight());
+                        + mTextRenderer.getCharacterHeight() + "   " + EmulatorView.this.getHeight());
             final int scrollRows = mEmulator.getScreen().getActiveRows() - mRows;
-            if (y < mCharacterHeight) {//向上滚动
+            if (y < mTextRenderer.getCharacterHeight()) {//向上滚动
                 mTopRow--;
                 if (mTopRow < -scrollRows) {
                     mTopRow = -scrollRows;
                 }
-            } else if (y + 2 * mCharacterHeight > EmulatorView.this.getHeight()) {//向下滚动
+            } else if (y + 2 * mTextRenderer.getCharacterHeight() > EmulatorView.this.getHeight()) {//向下滚动
                 mTopRow++;
                 if (mTopRow > 0) {
                     mTopRow = 0;

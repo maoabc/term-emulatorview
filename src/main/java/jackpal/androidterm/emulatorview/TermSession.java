@@ -63,7 +63,7 @@ public class TermSession {
 
     private TermKeyListener mKeyListener;
 
-    private ColorScheme mColorScheme = BaseTextRenderer.defaultColorScheme;
+    private ColorScheme mColorScheme = PaintRenderer.defaultColorScheme;
     private UpdateCallback mNotify;
 
     private OutputStream mTermOut;
@@ -242,12 +242,12 @@ public class TermSession {
     /**
      * Set the terminal emulator's window size and start terminal emulation.
      *
-     * @param columns The number of columns in the terminal window.
-     * @param rows    The number of rows in the terminal window.
+     * @param columns    The number of columns in the terminal window.
+     * @param screenRows The number of rows in the terminal window.
      */
-    public void initializeEmulator(int columns, int rows) {
-        mTranscriptScreen = new TranscriptScreen(columns, TRANSCRIPT_ROWS, rows);
-        mEmulator = new TerminalEmulator(this, mTranscriptScreen, columns, rows, mColorScheme);
+    public void initializeEmulator(int columns, int screenRows) {
+        mTranscriptScreen = new TranscriptScreen(columns, TRANSCRIPT_ROWS, screenRows);
+        mEmulator = new TerminalEmulator(this, mTranscriptScreen, columns, screenRows, mColorScheme);
         mEmulator.setDefaultUTF8Mode(mDefaultUTF8Mode);
         mEmulator.setKeyListener(mKeyListener);
 
@@ -544,7 +544,7 @@ public class TermSession {
      */
     public void setColorScheme(ColorScheme scheme) {
         if (scheme == null) {
-            scheme = BaseTextRenderer.defaultColorScheme;
+            scheme = PaintRenderer.defaultColorScheme;
         }
         mColorScheme = scheme;
         if (mEmulator == null) {
