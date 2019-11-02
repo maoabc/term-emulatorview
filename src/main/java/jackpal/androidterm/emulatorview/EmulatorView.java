@@ -28,6 +28,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.style.URLSpan;
@@ -555,6 +557,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * @param session The {@link TermSession} this view will be displaying.
      */
     public void attachSession(TermSession session) {
+        Log.d(TAG, "attachSession: " + session);
         mTextRenderer = null;
         mTopRow = 0;
         mLeftColumn = 0;
@@ -568,6 +571,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         mKeyListener = new TermKeyListener(session);
         session.setKeyListener(mKeyListener);
+        session.setTerminalClient(new BellCallback(getContext()));
 
         // Do init now if it was deferred until a TermSession was attached
         if (mDeferInit) {
@@ -2126,7 +2130,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                             x1 = x2;
                             x2 = tmp;
                         }
-                        outRect.set(x1, y1 + mHandleHeight, x2, y2 + mHandleHeight);
+                        outRect.set(x1, y1, x2, y2 + mHandleHeight);
                     }
                 }, ActionMode.TYPE_FLOATING);
             } else {
@@ -2535,6 +2539,28 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 case MotionEvent.ACTION_UP:  // fall through
                 case MotionEvent.ACTION_CANCEL:
                     showFloatingToolbar();
+            }
+        }
+    }
+
+    private static class BellCallback implements TerminalClient {
+
+        private final Vibrator vibrator;
+
+        BellCallback(Context context) {
+            vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        }
+
+        @Override
+        public void onBell() {
+            if (vibrator == null) {
+                return;
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                VibrationEffect oneShot = VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE);
+                vibrator.vibrate(oneShot);
+            } else {
+                vibrator.vibrate(60);
             }
         }
     }

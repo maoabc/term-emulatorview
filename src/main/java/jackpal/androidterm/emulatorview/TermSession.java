@@ -57,11 +57,6 @@ import java.nio.charset.CodingErrorAction;
  * and closes the attached I/O streams.
  */
 public class TermSession {
-    public void setKeyListener(TermKeyListener l) {
-        mKeyListener = l;
-    }
-
-    private TermKeyListener mKeyListener;
 
     private ColorScheme mColorScheme = PaintRenderer.defaultColorScheme;
     private UpdateCallback mNotify;
@@ -134,6 +129,12 @@ public class TermSession {
     };
 
     private UpdateCallback mTitleChangedListener;
+
+
+    private TermKeyListener mKeyListener;
+
+    private TerminalClient mTerminalClient;
+
 
     public TermSession() {
         this(false);
@@ -232,6 +233,14 @@ public class TermSession {
         mWriterThread.setName("TermSession output writer");
     }
 
+    public void setKeyListener(TermKeyListener l) {
+        mKeyListener = l;
+    }
+
+    public void setTerminalClient(TerminalClient terminalClient) {
+        this.mTerminalClient = terminalClient;
+    }
+
     protected void onProcessExit() {
         finish();
     }
@@ -247,6 +256,7 @@ public class TermSession {
         mEmulator = new TerminalEmulator(this, mTranscriptScreen, columns, screenRows, mColorScheme);
         mEmulator.setDefaultUTF8Mode(mDefaultUTF8Mode);
         mEmulator.setKeyListener(mKeyListener);
+        mEmulator.setTerminalClient(mTerminalClient);
 
         mIsRunning = true;
         mReaderThread.start();

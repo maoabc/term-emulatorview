@@ -167,17 +167,17 @@ class TranscriptScreen {
         char[] line;
         StyleRow color;
         int cursorWidth = 1;
-//        try {
-        line = mData.getLine(row);
-        color = mData.getLineColor(row);
-//        } catch (IllegalArgumentException e) {
-        // Out-of-bounds rows are blank.
-//            return;
-//        } catch (NullPointerException e) {
-        // Attempt to draw on a finished transcript
-        // XXX Figure out why this happens on Honeycomb
-//            return;
-//        }
+        try {
+            line = mData.getLine(row);
+            color = mData.getLineColor(row);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Out-of-bounds rows are blank.
+
+            // Attempt to draw on a finished transcript
+            // XXX Figure out why this happens on Honeycomb
+
+            return;
+        }
         int defaultStyle = mData.getDefaultStyle();
 
         if (line == null) {

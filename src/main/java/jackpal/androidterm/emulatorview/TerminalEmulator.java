@@ -34,11 +34,8 @@ import java.util.Locale;
  * video, color) alternate screen cursor key and keypad escape sequences.
  */
 class TerminalEmulator {
-    public void setKeyListener(TermKeyListener l) {
-        mKeyListener = l;
-    }
 
-    private TermKeyListener mKeyListener;
+
     /**
      * The cursor row. Numbered 0..mRows-1.
      */
@@ -385,7 +382,7 @@ class TerminalEmulator {
         mSpecialGraphicsCharMap['s'] = 0x23BD;    // Horizontal scanline 9
     }
 
-    public static final int[] UTF8BytesOfLead = {
+    private static final int[] UTF8BytesOfLead = {
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 00 - 0F
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 10 - 1F
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 20 - 2F
@@ -422,6 +419,9 @@ class TerminalEmulator {
     private CharsetDecoder mUTF8Decoder;
     private UpdateCallback mUTF8ModeNotify;
 
+    private TermKeyListener mKeyListener;
+
+    private TerminalClient mTerminalClient;
     /**
      * This is not accurate, but it makes the terminal more useful on
      * small screens.
@@ -455,6 +455,14 @@ class TerminalEmulator {
         mUTF8Decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
 
         reset();
+    }
+
+    public void setKeyListener(TermKeyListener l) {
+        mKeyListener = l;
+    }
+
+    public void setTerminalClient(TerminalClient terminalClient) {
+        this.mTerminalClient = terminalClient;
     }
 
     public TranscriptScreen getScreen() {
@@ -734,6 +742,8 @@ class TerminalEmulator {
                  * nothing */
                 if (mEscapeState == ESC_RIGHT_SQUARE_BRACKET) {
                     doEscRightSquareBracket(b);
+                } else {
+                    if (mTerminalClient != null) mTerminalClient.onBell();
                 }
                 break;
 
@@ -1828,9 +1838,7 @@ class TerminalEmulator {
     /**
      * Send a Unicode code point to the screen.
      *
-     * @param c         The code point of the character to display
-     * @param foreColor The foreground color of the character
-     * @param backColor The background color of the character
+     * @param c The code point of the character to display
      */
     private void emit(int c, int style) {
         boolean autoWrap = autoWrapEnabled();
