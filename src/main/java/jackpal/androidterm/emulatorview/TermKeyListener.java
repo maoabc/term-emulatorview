@@ -277,7 +277,7 @@ class TermKeyListener {
          * Construct a modifier key. UNPRESSED by default.
          */
         public ModifierKey() {
-            mState = UNPRESSED;
+            reset();
         }
 
         public void onPress() {
@@ -330,6 +330,11 @@ class TermKeyListener {
 
         public boolean isActive() {
             return mState != UNPRESSED;
+        }
+
+        public void reset() {
+            mState = UNPRESSED;
+
         }
 
         public int getUIMode() {
@@ -794,5 +799,10 @@ class TermKeyListener {
 
     public boolean isCtrlActive() {
         return mControlKey.isActive();
+    }
+
+    public void resetCtrl() {
+        mControlKey.reset();
+        updateCursorMode();
     }
 }

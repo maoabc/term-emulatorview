@@ -245,7 +245,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             int newTopRow = mScroller.getCurrY();
             if (newTopRow != mTopRow) {
                 mTopRow = newTopRow;
-                invalidate();
+                if (!awakenScrollBars()) invalidate();
             }
 
             if (more) {
@@ -295,10 +295,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * @return The number of lines in a multi-line-wrap set of links
      */
     private int createLinks(int row) {
-        TranscriptScreen transcriptScreen = mEmulator.getScreen();
-        char[] line = transcriptScreen.getScriptLine(row);
         int lineCount = 1;
 
+        TranscriptScreen transcriptScreen = mEmulator.getScreen();
+        if (transcriptScreen == null) {
+            return lineCount;
+        }
+        char[] line = transcriptScreen.getScriptLine(row);
         //Nothing to do if there's no text.
         if (line == null)
             return lineCount;
@@ -599,9 +602,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public void onResume() {
         updateSize(false);
-        if (mCursorBlink != 0) {
-            mHandler.postDelayed(mBlinkCursor, CURSOR_BLINK_PERIOD);
-        }
+//        if (mCursorBlink != 0) {
+//            mHandler.postDelayed(mBlinkCursor, CURSOR_BLINK_PERIOD);
+//        }
         if (mKeyListener != null) {
             mKeyListener.onResume();
         }
@@ -611,9 +614,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * Inform the view that it is no longer visible on the screen.
      */
     public void onPause() {
-        if (mCursorBlink != 0) {
-            mHandler.removeCallbacks(mBlinkCursor);
-        }
+//        if (mCursorBlink != 0) {
+//            mHandler.removeCallbacks(mBlinkCursor);
+//        }
         if (mKeyListener != null) {
             mKeyListener.onPause();
         }
@@ -969,7 +972,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollRange() {
-        return 0;
+        if (mEmulator == null || mEmulator.getScreen() == null) {
+            return 0;
+        }
+        return mEmulator.getScreen().getActiveRows();
     }
 
     /**
@@ -989,7 +995,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     @Override
     protected int computeVerticalScrollOffset() {
-        return 0;
+        if (mEmulator == null || mEmulator.getScreen() == null) {
+            return 0;
+        }
+        return mTopRow + mEmulator.getScreen().getActiveRows() - mRows;
     }
 
     /**
@@ -1210,13 +1219,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         mTopRow =
                 Math.min(0, Math.max(-(mEmulator.getScreen()
                         .getActiveTranscriptRows()), mTopRow + deltaRows));
-        invalidate();
+        if (!awakenScrollBars()) invalidate();
 
         return true;
     }
 
-    public void onSingleTapConfirmed(MotionEvent e) {
-    }
 
     public boolean onJumpTapDown(MotionEvent e1, MotionEvent e2) {
         // Scroll to bottom
@@ -1428,6 +1435,22 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return false;
     }
 
+    public boolean isCtrlActive() {
+        return mKeyListener.isCtrlActive();
+    }
+
+    public void resetCtrlKey() {
+        mKeyListener.resetCtrl();
+        invalidate();
+    }
+
+
+    public void sendCtrlKey() {
+        mKeyListener.handleControlKey(true);
+        mKeyListener.handleControlKey(false);
+        invalidate();
+    }
+
     private boolean handleHardwareControlKey(int keyCode, KeyEvent event) {
         if (keyCode == KeycodeConstants.KEYCODE_CTRL_LEFT ||
                 keyCode == KeycodeConstants.KEYCODE_CTRL_RIGHT) {
@@ -1458,6 +1481,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return event.isSystem();
     }
 
+    private OnClearKeyStatusListener mKeyStatusListener;
+
     private void clearSpecialKeyStatus() {
         if (mIsControlKeySent) {
             mIsControlKeySent = false;
@@ -1469,6 +1494,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mKeyListener.handleFnKey(false);
             invalidate();
         }
+        if (mKeyStatusListener != null) mKeyStatusListener.onKeyStatusClear();
+    }
+
+    public void setKeyStatusListener(OnClearKeyStatusListener clearKeyStatusListener) {
+        this.mKeyStatusListener = clearKeyStatusListener;
     }
 
     private void updateText() {
@@ -1578,7 +1608,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
         int cursorStyle = mKeyListener.getCursorMode();
 
-        int linkLinesToSkip = 0; //for multi-line links
+//        int linkLinesToSkip = 0; //for multi-line links
 
         int selY1 = this.mSelY1;
         int selY2 = this.mSelY2;
@@ -1602,11 +1632,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
             y += characterHeight;
             //if no lines to skip, create links for the line being drawn
-            if (linkLinesToSkip == 0)
-                linkLinesToSkip = createLinks(i);
+//            if (linkLinesToSkip == 0)
+//                linkLinesToSkip = createLinks(i);
 
             //createLinks always returns at least 1
-            --linkLinesToSkip;
+//            --linkLinesToSkip;
         }
 
         if (mSelectionModifierCursorController != null &&
@@ -2563,5 +2593,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 vibrator.vibrate(60);
             }
         }
+    }
+
+    public interface OnClearKeyStatusListener {
+        void onKeyStatusClear();
     }
 }

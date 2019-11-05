@@ -1,13 +1,18 @@
 package mao.emulatorview;
 
 import android.content.Context;
+
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import static org.junit.Assert.*;
+import java.io.UnsupportedEncodingException;
+
+import jackpal.androidterm.emulatorview.WcWidth;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Instrumented test, which will execute on an Android device.
@@ -22,5 +27,15 @@ public class ExampleInstrumentedTest {
         Context appContext = InstrumentationRegistry.getTargetContext();
 
         assertEquals("mao.emulatorview.test", appContext.getPackageName());
+    }
+
+    @Test
+    public void testWcwidth() throws UnsupportedEncodingException {
+        int wcwidth = WcWidth.wcwidth(0x1F600);
+        System.out.println("widths " + wcwidth);
+
+        byte[] bytes = "中".getBytes("UTF-8");
+        System.out.println("widths 3 " + Integer.toHexString(bytes[0])+"  "+Integer.toHexString(bytes[1])+"  "+Integer.toHexString(bytes[2]));
+
     }
 }

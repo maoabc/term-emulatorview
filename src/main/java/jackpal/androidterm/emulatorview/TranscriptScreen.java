@@ -458,6 +458,9 @@ class TranscriptScreen {
      * @return The line of text at this row index
      */
     char[] getScriptLine(int row) {
+        if (mData == null) {
+            return null;
+        }
         return mData.getLine(row);
     }
 
