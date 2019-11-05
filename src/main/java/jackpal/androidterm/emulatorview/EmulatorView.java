@@ -27,7 +27,6 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.text.SpannableStringBuilder;
@@ -637,6 +636,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             mColorScheme = scheme;
         }
         updateText();
+    }
+
+    public ColorScheme getColorScheme() {
+        return mColorScheme;
     }
 
     @Override
@@ -1509,6 +1512,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         mBackgroundPaint.setColor(scheme.getBackColor());
 
         updateSize(true);
+
+        ViewParent parent = getParent();
+        if (parent instanceof View) {
+            ((View) parent).setBackgroundColor(scheme.getBackColor());
+        }
     }
 
     /**
@@ -1601,11 +1609,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         int cx = mEmulator.getCursorCol();
         int cy = mEmulator.getCursorRow();
         boolean cursorVisible = mCursorVisible && mEmulator.getShowCursor();
-        String effectiveImeBuffer = mImeBuffer;
-        int combiningAccent = mKeyListener.getCombiningAccent();
-        if (combiningAccent != 0) {
-            effectiveImeBuffer += String.valueOf((char) combiningAccent);
-        }
+//        String effectiveImeBuffer = mImeBuffer;
+//        int combiningAccent = mKeyListener.getCombiningAccent();
+//        if (combiningAccent != 0) {
+//            effectiveImeBuffer += String.valueOf((char) combiningAccent);
+//        }
         int cursorStyle = mKeyListener.getCursorMode();
 
 //        int linkLinesToSkip = 0; //for multi-line links
@@ -1629,7 +1637,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                     selx2 = mColumns - 1;
                 }
             }
-            mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, effectiveImeBuffer, cursorStyle);
+            mEmulator.getScreen().drawText(i, canvas, x, y, mTextRenderer, cursorX, selx1, selx2, null, cursorStyle);
             y += characterHeight;
             //if no lines to skip, create links for the line being drawn
 //            if (linkLinesToSkip == 0)
@@ -1821,14 +1829,16 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private boolean mIsDragging;
         private float mTouchToWindowOffsetX;
         private float mTouchToWindowOffsetY;
-        private float mHotspotX;
-        private float mHotspotY;
+        private int mHotspotX;
+        private int mHotspotY;
         private float mTouchOffsetY;
         private int mLastParentX;
         private int mLastParentY;
 
         private final int mOrigOrient;
         private int mOrientation;
+
+        private final int mOrigHotspotX;
 
         private int mHandleWidth;
         private int mHandleHeight;
@@ -1854,6 +1864,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             this.mOrigOrient = orientation;
             setOrientation(orientation);
+            mOrigHotspotX = mHotspotX;
         }
 
         public void setOrientation(int orientation) {
@@ -1922,12 +1933,14 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 hide();
                 return;
             }
+//            checkChangedOrientation();
             mContainer.setContentView(this);
             final int[] coords = mTempCoords;
             EmulatorView.this.getLocationInWindow(coords);
             coords[0] += mPointX;
             coords[1] += mPointY;
             mContainer.showAtLocation(EmulatorView.this, 0, coords[0], coords[1]);
+
         }
 
         public void hide() {
@@ -1939,44 +1952,31 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return mContainer.isShowing();
         }
 
-        private void checkChangedOrientation() {
+        void checkChangedOrientation() {
             //防止handleView抖动
-            long millis = SystemClock.currentThreadTimeMillis();
-            if (millis - mLastTime < 50) {
-                return;
-            }
-            mLastTime = millis;
+//            long millis = SystemClock.currentThreadTimeMillis();
+//            if (millis - mLastTime < 50) {
+//                return;
+//            }
+//            mLastTime = millis;
 
             final EmulatorView hostView = EmulatorView.this;
-            final int left = hostView.getLeft();
-            final int right = hostView.getWidth();
-            final int top = hostView.getTop();
-            final int bottom = hostView.getHeight();
+            final int left = hostView.getLeft() + hostView.getPaddingLeft();
+            ;
+            final int right = hostView.getWidth() - hostView.getPaddingRight();
 
-            if (mTempRect == null) {
-                mTempRect = new Rect();
-            }
-            final Rect clip = mTempRect;
-            clip.left = left + EmulatorView.this.getPaddingLeft();
-            clip.top = top + EmulatorView.this.getPaddingTop();
-            clip.right = right - EmulatorView.this.getPaddingRight();
-            clip.bottom = bottom - EmulatorView.this.getPaddingBottom();
-
-            final ViewParent parent = hostView.getParent();
-            if (parent == null || !parent.getChildVisibleRect(hostView, clip, null)) {
-                return;
-            }
 
             final int[] coords = mTempCoords;
             hostView.getLocationInWindow(coords);
             final int posX = coords[0] + mPointX;
 
-            if (posX < clip.left) {
+            if (posX < left) {
+                float old = this.mHotspotX;
                 changeOrientation(RIGHT);
-            } else if (posX + mHandleWidth > clip.right) {
+            } else if (posX + mHandleWidth > right) {
                 changeOrientation(LEFT);
             } else {
-                changeOrientation(mOrigOrient);
+//                changeOrientation(mOrigOrient);
             }
         }
 
@@ -2018,10 +2018,13 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private void moveTo(int x, int y) {
             mPointX = x;
             mPointY = y;
-//            checkChangedOrientation();
+            Log.d(TAG, "moveTo: " + x + "   " + y);
             if (isPositionVisible()) {
                 int[] coords = null;
                 if (mContainer.isShowing()) {
+//                    if (mIsDragging) {
+//                        checkChangedOrientation();
+//                    }
                     coords = mTempCoords;
                     EmulatorView.this.getLocationInWindow(coords);
                     int x1 = coords[0] + mPointX;
