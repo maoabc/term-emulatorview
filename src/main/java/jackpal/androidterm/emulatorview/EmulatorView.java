@@ -1831,12 +1831,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private final int mOrigOrient;
         private int mOrientation;
 
-        private final int mOrigHotspotX;
 
         private int mHandleWidth;
         private int mHandleHeight;
 
-        private long mLastTime;
+//        private long mLastTime;
 
 
         public static final int LEFT = 0;
@@ -1857,7 +1856,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             this.mOrigOrient = orientation;
             setOrientation(orientation);
-            mOrigHotspotX = mHotspotX;
         }
 
         public void setOrientation(int orientation) {
@@ -1964,12 +1962,11 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             final int posX = coords[0] + mPointX;
 
             if (posX < left) {
-                float old = this.mHotspotX;
                 changeOrientation(RIGHT);
             } else if (posX + mHandleWidth > right) {
                 changeOrientation(LEFT);
             } else {
-//                changeOrientation(mOrigOrient);
+                changeOrientation(mOrigOrient);
             }
         }
 
@@ -1989,10 +1986,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 mTempRect = new Rect();
             }
             final Rect clip = mTempRect;
-            clip.left = left + EmulatorView.this.getPaddingLeft();
-            clip.top = top + EmulatorView.this.getPaddingTop();
-            clip.right = right - EmulatorView.this.getPaddingRight();
-            clip.bottom = bottom - EmulatorView.this.getPaddingBottom();
+            clip.left = left + hostView.getPaddingLeft();
+            clip.top = top + hostView.getPaddingTop();
+            clip.right = right - hostView.getPaddingRight();
+            clip.bottom = bottom - hostView.getPaddingBottom();
 
             final ViewParent parent = hostView.getParent();
             if (parent == null || !parent.getChildVisibleRect(hostView, clip, null)) {
