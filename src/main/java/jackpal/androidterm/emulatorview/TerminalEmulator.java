@@ -965,7 +965,7 @@ class TerminalEmulator {
                 mDecFlags |= mask;
                 switch (arg) {
                     case 1:
-                        mKeyListener.setCursorKeysApplicationMode(true);
+                        if (mKeyListener != null) mKeyListener.setCursorKeysApplicationMode(true);
                         break;
                     case 47:
                     case 1047:
@@ -984,7 +984,7 @@ class TerminalEmulator {
                 mDecFlags &= ~mask;
                 switch (arg) {
                     case 1:
-                        mKeyListener.setCursorKeysApplicationMode(false);
+                        if (mKeyListener != null) mKeyListener.setCursorKeysApplicationMode(false);
                         break;
                     case 47:
                     case 1047:

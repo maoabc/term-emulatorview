@@ -304,14 +304,14 @@ class PaintRenderer {
     static final ColorScheme defaultColorScheme =
             new ColorScheme(0xffcccccc, 0xff000000);
     private static final Matrix.ScaleToFit mScaleType = Matrix.ScaleToFit.FILL;
-    private final Paint mCursorScreenPaint;
-    private final Paint mCopyRedToAlphaPaint;
-    private final Paint mCursorPaint;
-    private final Paint mCursorStrokePaint;
-    private final Path mShiftCursor;
-    private final Path mAltCursor;
-    private final Path mCtrlCursor;
-    private final Path mFnCursor;
+    private Paint mCursorScreenPaint;
+    private Paint mCopyRedToAlphaPaint;
+    private Paint mCursorPaint;
+    private Paint mCursorStrokePaint;
+    private Path mShiftCursor;
+    private Path mAltCursor;
+    private Path mCtrlCursor;
+    private Path mFnCursor;
     protected boolean mReverseVideo;
     protected int[] mPalette;
     private RectF mTempSrc;
@@ -323,7 +323,10 @@ class PaintRenderer {
     private Bitmap mWorkBitmap;
     private int mCursorBitmapCursorMode = -1;
 
-    public PaintRenderer(int fontSize, ColorScheme scheme) {
+    PaintRenderer() {
+    }
+
+    void updateSize(int fontSize, ColorScheme scheme) {
         if (scheme == null) {
             scheme = defaultColorScheme;
         }
@@ -385,7 +388,7 @@ class PaintRenderer {
         mCharHeight = (int) Math.ceil(mTextPaint.getFontSpacing());
         mCharAscent = (int) Math.ceil(mTextPaint.ascent());
         mCharDescent = mCharHeight + mCharAscent;
-        mCharWidth = mTextPaint.measureText(EXAMPLE_CHAR, 0, 1);
+        mCharWidth = (int) Math.ceil(mTextPaint.measureText(EXAMPLE_CHAR, 0, 1));
     }
 
     public void setTypeface(Typeface typeface) {
@@ -424,6 +427,9 @@ class PaintRenderer {
             backColor += 8;
         }
         Paint textPaint = this.mTextPaint;
+        if (textPaint == null) {
+            return;
+        }
 
         textPaint.setColor(mPalette[backColor]);
 
@@ -493,21 +499,13 @@ class PaintRenderer {
         }
     }
 
-    public int getCharacterHeight() {
-        return mCharHeight;
-    }
-
-    public float getCharacterWidth() {
-        return mCharWidth;
-    }
-
     public int getTopMargin() {
         return 0;
     }
 
     private Paint mTextPaint;
-    private final float mCharWidth;
-    private final int mCharHeight;
+    int mCharWidth;
+    int mCharHeight;
     private int mCharAscent;
     private int mCharDescent;
     private static final char[] EXAMPLE_CHAR = {'X'};
@@ -568,6 +566,9 @@ class PaintRenderer {
     }
 
     private void drawCursorHelper(Canvas canvas, Path path, int mode, int shift) {
+        if (path == null) {
+            return;
+        }
         switch ((mode >> shift) & MODE_MASK) {
             case MODE_ON:
                 canvas.drawPath(path, mCursorStrokePaint);

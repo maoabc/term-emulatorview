@@ -377,10 +377,13 @@ class TermKeyListener {
     /**
      * Construct a term key listener.
      */
-    public TermKeyListener(TermSession termSession) {
-        mTermSession = termSession;
+    TermKeyListener() {
         initKeyCodes();
         updateCursorMode();
+    }
+
+    public void setTermSession(TermSession termSession) {
+        this.mTermSession = termSession;
     }
 
     public void setBackKeyCharacter(int code) {
@@ -624,7 +627,7 @@ class TermKeyListener {
                 }
                 if (effectiveAlt) {
                     if (mAltSendsEsc) {
-                        mTermSession.write(new byte[]{0x1b}, 0, 1);
+                        if (mTermSession != null) mTermSession.write(new byte[]{0x1b}, 0, 1);
                         effectiveMetaState &= ~KeyEvent.META_ALT_MASK;
                     } else if (SUPPORT_8_BIT_META) {
                         setHighBit = true;
@@ -640,7 +643,7 @@ class TermKeyListener {
 
                 if ((metaState & KeyEvent.META_META_ON) != 0) {
                     if (mAltSendsEsc) {
-                        mTermSession.write(new byte[]{0x1b}, 0, 1);
+                        if (mTermSession != null) mTermSession.write(new byte[]{0x1b}, 0, 1);
                         effectiveMetaState &= ~KeyEvent.META_META_MASK;
                     } else {
                         if (SUPPORT_8_BIT_META) {
@@ -682,7 +685,7 @@ class TermKeyListener {
             if (setHighBit) {
                 result |= 0x80;
             }
-            mTermSession.write(result);
+            if (mTermSession != null) mTermSession.write(result);
         }
     }
 
@@ -749,7 +752,7 @@ class TermKeyListener {
                 byte[] bytes = code.getBytes();
                 Log.d(EmulatorDebug.LOG_TAG, "Out: '" + EmulatorDebug.bytesToString(bytes, 0, bytes.length) + "'");
             }
-            mTermSession.write(code);
+            if (mTermSession != null) mTermSession.write(code);
             return true;
         }
         return false;
