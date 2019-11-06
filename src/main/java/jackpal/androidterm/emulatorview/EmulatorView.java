@@ -20,6 +20,7 @@ import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
@@ -118,6 +119,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     private int mTopOfScreenMargin;
 
+    private int mLeftOfScreenMargin;
+
+    private int mRightOfScreenMargin;
     /**
      * Used to render text
      */
@@ -519,7 +523,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         super(context);
         attachSession(session);
         setDensity(metrics);
-        commonConstructor(context);
+        commonConstructor(context, null, 0);
     }
 
     /**
@@ -531,7 +535,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public EmulatorView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        commonConstructor(context);
+        commonConstructor(context, attrs, 0);
     }
 
     /**
@@ -544,13 +548,18 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      */
     public EmulatorView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        commonConstructor(context);
+        commonConstructor(context, attrs, defStyle);
     }
 
-    private void commonConstructor(Context context) {
-        // TODO: See if we want to use the API level 11 constructor to get new flywheel feature.
+    private void commonConstructor(Context context, AttributeSet attrs, int defStyle) {
+
+        TypedArray a = context.obtainStyledAttributes(
+                attrs, R.styleable.EmulatorView, defStyle, 0);
+        mLeftOfScreenMargin = a.getDimensionPixelSize(R.styleable.EmulatorView_screenMarginLeft, 0);
+        mRightOfScreenMargin = a.getDimensionPixelSize(R.styleable.EmulatorView_screenMarginRight, 0);
         mScroller = new Scroller(context);
         mMouseTrackingFlingRunner.mScroller = new Scroller(context);
+        a.recycle();
     }
 
     /**
@@ -559,7 +568,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
      * @param session The {@link TermSession} this view will be displaying.
      */
     public void attachSession(TermSession session) {
-        Log.d(TAG, "attachSession: " + session);
+        if (DEBUG)
+            Log.d(TAG, "attachSession: " + session);
         mTextRenderer = null;
         mTopRow = 0;
         mLeftColumn = 0;
@@ -1044,25 +1054,6 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         return mVisibleHeight;
     }
 
-    /**
-     * Gets the visible number of rows for the view, useful when updating Ptysize with the correct number of rows/columns
-     *
-     * @return The rows for the visible number of rows, this is calculate in updateSize(int w, int h), please call
-     * updateSize(true) if the view changed, to get the correct calculation before calling this.
-     */
-    public int getVisibleRows() {
-        return mVisibleRows;
-    }
-
-    /**
-     * Gets the visible number of columns for the view, again useful to get when updating PTYsize
-     *
-     * @return the columns for the visisble view, please call updateSize(true) to re-calculate this if the view has changed
-     */
-    public int getVisibleColumns() {
-        return mVisibleColumns;
-    }
-
 
     /**
      * Page the terminal view (scroll it up or down by <code>delta</code>
@@ -1287,7 +1278,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private int getCursorX(float x) {
-        return (int) Math.ceil(x / mTextRenderer.getCharacterWidth());
+        return (int) Math.ceil((x - mLeftOfScreenMargin) / mTextRenderer.getCharacterWidth());
     }
 
     private int getCursorY(float y, boolean isMouse) {
@@ -1298,7 +1289,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         if (cx > mColumns) {
             cx = mColumns;
         }
-        return Math.round(cx * mTextRenderer.getCharacterWidth());
+        return Math.round(cx * mTextRenderer.getCharacterWidth()) + mLeftOfScreenMargin;
     }
 
     private int getPointY(int cy) {
@@ -1513,10 +1504,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
         updateSize(true);
 
-        ViewParent parent = getParent();
-        if (parent instanceof View) {
-            ((View) parent).setBackgroundColor(scheme.getBackColor());
-        }
+//        ViewParent parent = getParent();
+//        if (parent instanceof View) {
+//            ((View) parent).setBackgroundColor(scheme.getBackColor());
+//        }
     }
 
     /**
@@ -1541,8 +1532,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
     }
 
     private void updateSize(int w, int h) {
-        mColumns = Math.max(1, (int) (((float) w) / mTextRenderer.getCharacterWidth()));
+        mColumns = Math.max(1, (int) (((float) w - (mLeftOfScreenMargin + mRightOfScreenMargin)) / mTextRenderer.getCharacterWidth()));
         mVisibleColumns = Math.max(1, (int) (((float) mVisibleWidth) / mTextRenderer.getCharacterWidth()));
+
 
         mTopOfScreenMargin = mTextRenderer.getTopMargin();
         mRows = Math.max(1, (h - mTopOfScreenMargin) / mTextRenderer.getCharacterHeight());
@@ -1591,19 +1583,20 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             return;
         }
 
-        int w = getWidth() - getPaddingRight() - getPaddingLeft();
-        int h = getHeight() - getPaddingTop() - getPaddingBottom();
+        int left = mLeftOfScreenMargin;
+        int right = getWidth();
+        int h = getHeight();
 
         boolean reverseVideo = mEmulator.getReverseVideo();
         mTextRenderer.setReverseVideo(reverseVideo);
 
         Paint backgroundPaint =
                 reverseVideo ? mForegroundPaint : mBackgroundPaint;
-        canvas.drawRect(0, 0, w, h, backgroundPaint);
+        canvas.drawRect(0, 0, right, h, backgroundPaint);
 
         final int characterHeight = mTextRenderer.getCharacterHeight();
 
-        float x = -mLeftColumn * mTextRenderer.getCharacterWidth();
+        float x = left - mLeftColumn * mTextRenderer.getCharacterWidth();
         float y = characterHeight + mTopOfScreenMargin;
         int endLine = mTopRow + mRows;
         int cx = mEmulator.getCursorCol();
@@ -1963,7 +1956,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
             final EmulatorView hostView = EmulatorView.this;
             final int left = hostView.getLeft() + hostView.getPaddingLeft();
             ;
-            final int right = hostView.getWidth() - hostView.getPaddingRight();
+            final int right = hostView.getRight() - hostView.getPaddingRight();
 
 
             final int[] coords = mTempCoords;
@@ -1988,9 +1981,9 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 
             final EmulatorView hostView = EmulatorView.this;
             final int left = 0;
-            final int right = hostView.getWidth();
+            final int right = hostView.getRight();
             final int top = 0;
-            final int bottom = hostView.getHeight();
+            final int bottom = hostView.getBottom();
 
             if (mTempRect == null) {
                 mTempRect = new Rect();
@@ -2018,7 +2011,7 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         private void moveTo(int x, int y) {
             mPointX = x;
             mPointY = y;
-            Log.d(TAG, "moveTo: " + x + "   " + y);
+            if (DEBUG) Log.d(TAG, "moveTo: " + x + "   " + y);
             if (isPositionVisible()) {
                 int[] coords = null;
                 if (mContainer.isShowing()) {
@@ -2184,34 +2177,26 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
         }
 
         public void updatePosition(HandleView handle, int x, int y) {
-            final int characterHeight = mTextRenderer.getCharacterHeight();
             if (DEBUG)
                 Log.d(TAG, "updatePosition: " + x + "  " + y + "   " + mTopRow + "   "
-                        + characterHeight + "   " + EmulatorView.this.getHeight());
-            final int scrollRows = mEmulator.getScreen().getActiveRows() - mRows;
-            if (y < characterHeight) {//向上滚动
-                mTopRow--;
-                if (mTopRow < -scrollRows) {
-                    mTopRow = -scrollRows;
-                }
-            } else if (y + 2 * characterHeight > EmulatorView.this.getHeight()) {//向下滚动
-                mTopRow++;
-                if (mTopRow > 0) {
-                    mTopRow = 0;
-                }
-            }
-            TranscriptScreen screen = mEmulator.getScreen();
+                        + mTextRenderer.getCharacterHeight() + "   " + EmulatorView.this.getHeight());
+            final TranscriptScreen screen = mEmulator.getScreen();
+            final int scrollRows = screen.getActiveRows() - mRows;
             if (handle == mStartHandle) {
                 mSelX1 = getCursorX(x);
                 mSelY1 = getCursorY(y, false);
                 if (mSelX1 < 0) {
                     mSelX1 = 0;
                 }
+
                 if (mSelY1 < -scrollRows) {
                     mSelY1 = -scrollRows;
+
                 } else if (mSelY1 > mRows - 1) {
                     mSelY1 = mRows - 1;
+
                 }
+
 
                 if (mSelY1 > mSelY2) {
                     mSelY1 = mSelY2;
@@ -2219,6 +2204,20 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
                     mSelX1 = mSelX2;
                 }
+
+                if (mSelY1 <= mTopRow) {
+                    mTopRow--;
+                    if (mTopRow < -scrollRows) {
+                        mTopRow = -scrollRows;
+                    }
+                } else if (mSelY1 >= mTopRow + mRows) {
+                    mTopRow++;
+                    if (mTopRow > 0) {
+                        mTopRow = 0;
+                    }
+                }
+
+
                 mSelX1 = getValidCurX(screen, mSelY1, mSelX1);
 
                 if (DEBUG)
@@ -2229,6 +2228,8 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (mSelX2 < 0) {
                     mSelX2 = 0;
                 }
+
+
                 if (mSelY2 < -scrollRows) {
                     mSelY2 = -scrollRows;
                 } else if (mSelY2 > mRows - 1) {
@@ -2241,6 +2242,19 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
                 if (mSelY1 == mSelY2 && mSelX1 > mSelX2) {
                     mSelX2 = mSelX1;
                 }
+
+                if (mSelY2 <= mTopRow) {//终端滑动
+                    mTopRow--;
+                    if (mTopRow < -scrollRows) {
+                        mTopRow = -scrollRows;
+                    }
+                } else if (mSelY2 >= mTopRow + mRows) {
+                    mTopRow++;
+                    if (mTopRow > 0) {
+                        mTopRow = 0;
+                    }
+                }
+
                 mSelX2 = getValidCurX(screen, mSelY2, mSelX2);
             }
             if (DEBUG)

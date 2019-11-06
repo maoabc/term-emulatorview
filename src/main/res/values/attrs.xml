@@ -2,4 +2,9 @@
 <resources>
     
     <attr name="colorControlActivated" format="color" />
+    
+    <declare-styleable name="EmulatorView">
+        <attr name="screenMarginLeft" format="dimension" />
+        <attr name="screenMarginRight" format="dimension" />
+    </declare-styleable>
 </resources>
