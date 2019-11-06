@@ -630,9 +630,6 @@ public class TermSession {
     public void finish() {
         mIsRunning = false;
         mEmulator.finish();
-        if (mTranscriptScreen != null) {
-            mTranscriptScreen.finish();
-        }
 
         // Stop the reader and writer threads, and close the I/O streams
         if (mWriterHandler != null) {

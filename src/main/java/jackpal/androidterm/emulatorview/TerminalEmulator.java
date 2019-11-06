@@ -2042,7 +2042,6 @@ class TerminalEmulator {
 
     public void finish() {
         if (mAltBuffer != null) {
-            mAltBuffer.finish();
             mAltBuffer = null;
         }
     }

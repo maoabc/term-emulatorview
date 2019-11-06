@@ -299,6 +299,9 @@ class TranscriptScreen {
      * @return the count of active rows.
      */
     public int getActiveRows() {
+        if (mData == null) {
+            return 0;
+        }
         return mData.getActiveRows();
     }
 
