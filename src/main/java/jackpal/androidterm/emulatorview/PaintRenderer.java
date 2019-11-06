@@ -388,6 +388,10 @@ class PaintRenderer {
         mCharWidth = mTextPaint.measureText(EXAMPLE_CHAR, 0, 1);
     }
 
+    public void setTypeface(Typeface typeface) {
+        mTextPaint.setTypeface(typeface);
+    }
+
     private static int[] cloneDefaultColors() {
         int length = sXterm256Paint.length;
         int[] clone = new int[TextStyle.ciColorLength];

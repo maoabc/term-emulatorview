@@ -24,6 +24,7 @@ import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -1508,6 +1509,10 @@ public class EmulatorView extends View implements GestureDetector.OnGestureListe
 //        if (parent instanceof View) {
 //            ((View) parent).setBackgroundColor(scheme.getBackColor());
 //        }
+    }
+
+    public void setTypeface(Typeface typeface) {
+        if (mTextRenderer != null) mTextRenderer.setTypeface(typeface);
     }
 
     /**
